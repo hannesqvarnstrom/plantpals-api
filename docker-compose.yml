@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    ports:
+      - 3000:3000
+      - 9229:9229 # debugger port
+    volumes:
+      - .:/usr/src # change this?
+      # - /usr/src/app/node_modules
+    command: npm run dev # ?
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgres://postgres@postgres/plant_catalog
+      #PORT: 5000
+  
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - 5433:5432 #5433 is the one we connect to on the outside
+    environment:
+      POSTGRES_DB: plant_catalog
+      POSTGRES_HOST_AUTH_METHOD: trust
