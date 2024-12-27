@@ -10,8 +10,8 @@ import {
 	tradeablePlants,
 	users,
 } from "../db/schema";
-import FamilyModel, { TFamily } from "../models/family";
-import GenusModel, { TGenus } from "../models/genus";
+import FamilyModel, { type TFamily } from "../models/family";
+import GenusModel, { type TGenus } from "../models/genus";
 import SpeciesModel, {
 	type RawSpecies,
 	type TSpecies,
@@ -123,7 +123,7 @@ class TaxonomyService {
 
 		// Create individual ILIKE conditions for each term
 		const searchConditions = searchTerms.map((term) => {
-			const termQuery = `%${term}%`;
+			const termQuery = `%${term === "x" ? "×" : term}%`;
 			return or(
 				// Search in the main name
 				ilike(species.name, termQuery),
@@ -147,8 +147,6 @@ class TaxonomyService {
 			? and(searchWhere, not(eq(species.rank, excludeRank)))
 			: searchWhere;
 
-		// const query = `%${q}%`;
-		// const fixedQuery = query.replace(' x ', ' × ')
 		const results = await dbManager.db
 			.selectDistinctOn([species.id], {
 				id: plants.id,
@@ -168,8 +166,8 @@ class TaxonomyService {
 				createdAt: species.createdAt,
 				speciesName: species.speciesName,
 				cultivarName: species.cultivarName,
-				hybridMomId: species.hybridMomId,
-				hybridDadId: species.hybridDadId,
+				crossMomId: species.crossMomId,
+				crossDadId: species.crossDadId,
 				parentSpeciesId: species.parentSpeciesId,
 				userSubmitted: species.userSubmitted,
 				genusName: genera.name,
@@ -182,15 +180,6 @@ class TaxonomyService {
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
 			.where(finalWhere)
-			// .where(
-			//     excludeRank ? and(
-			//         ilike(species.name, fixedQuery),
-			//         not(eq(species.rank, excludeRank))
-			//     ) :
-			//         ilike(species.name, fixedQuery)
-
-			//     // or( ilike(species.vernacularNames, query))
-			// )
 			.limit(30)
 			.offset(page ? page * 30 : 0);
 
@@ -456,14 +445,14 @@ class TaxonomyService {
 			name = `${parentName} '${capitalizeFirstLetterInWords(
 				species.cultivarName,
 			)}'`;
-		} else if (species.rank === "HYBRID") {
-			const { hybridMomId, hybridDadId } = species;
-			if (!hybridMomId || !hybridDadId) {
-				throw new Error(`cant find parents for hybrid with id ${species.id}`);
+		} else if (species.rank === "CROSS") {
+			const { crossMomId, crossDadId } = species;
+			if (!crossMomId || !crossDadId) {
+				throw new Error(`cant find parents for cross with id ${species.id}`);
 			}
 
-			const mom = await this.speciesModel.getById(hybridMomId);
-			const dad = await this.speciesModel.getById(hybridDadId);
+			const mom = await this.speciesModel.getById(crossMomId);
+			const dad = await this.speciesModel.getById(crossDadId);
 
 			const genus = await this.genusModel.getById(species.genusId);
 
@@ -475,25 +464,13 @@ class TaxonomyService {
 				mom.genusId === genus.id;
 			if (!valid) {
 				throw new Error(
-					`wrong structure for hybrid parents for species with id ${species.id}`,
+					`wrong structure for cross parents for species with id ${species.id}`,
 				);
 			}
 
-			const momName = getHybridParentName(mom);
-			// mom?.speciesName ||
-			// (mom?.cultivarName
-			// 	? `'${capitalizeFirstLetterInWords(mom.cultivarName)}'`
-			// 	: "");
-			const dadName = getHybridParentName(dad);
+			const momName = getCrossParentName(mom);
+			const dadName = getCrossParentName(dad);
 
-			// dad?.speciesName ||
-			// (dad?.cultivarName
-			// 	? `'${capitalizeFirstLetterInWords(dad.cultivarName)}'`
-			// 	: "");
-
-			// if (!momName || !dadName) {
-			// 	throw new AppError("Hybrid parents must have species name set");
-			// }
 			name = `${genus.name} ${momName} × ${dadName}`;
 		} else {
 			/**
@@ -530,8 +507,8 @@ class TaxonomyService {
 		submissionType,
 		closestTaxonomicParent,
 		closestTaxonomicParentType,
-		hybridMomId,
-		hybridDadId,
+		crossMomId,
+		crossDadId,
 		name,
 	}: Zod.infer<typeof postSpeciesSubmissionSchema>): Promise<
 		{ valid: false; reason: string } | { valid: true; reason: null }
@@ -579,9 +556,9 @@ class TaxonomyService {
 
 				if (
 					closestTaxonomicParentType === "species" &&
-					(parent as TSpecies).rank === "HYBRID"
+					(parent as TSpecies).rank === "CROSS"
 				) {
-					throw new AppError("cultivar parent must not be a hybrid");
+					throw new AppError("cultivar parent must not be a cross");
 				}
 				break;
 			}
@@ -591,24 +568,18 @@ class TaxonomyService {
 			// subspecies should have a column sub_species_name?
 			// when rendered,add ssp. between parent name and subspecies name
 
-			case "hybrid": {
-				// const hybridParentGenus = await this.genusModel.getById(
-				//     closestTaxonomicParent
-				// );
-				// if (!hybridParentGenus) {
-				//     throw new AppError("closest parent must be a genus", 400);
-				// }
-				if (!hybridMomId || !hybridDadId) {
+			case "cross": {
+				if (!crossMomId || !crossDadId) {
 					throw new AppError(
-						"both parents must be supplied to create a hybrid",
+						"both parents must be supplied to create a cross",
 						400,
 					);
 				}
-				const momSpecies = await this.speciesModel.getById(hybridMomId);
-				const dadSpecies = await this.speciesModel.getById(hybridDadId);
+				const momSpecies = await this.speciesModel.getById(crossMomId);
+				const dadSpecies = await this.speciesModel.getById(crossDadId);
 
 				if (!momSpecies || !dadSpecies) {
-					throw new AppError("both parents must exist to create a hybrid", 400);
+					throw new AppError("both parents must exist to create a cross", 400);
 				}
 
 				if (momSpecies.genusId !== dadSpecies.genusId) {
@@ -620,19 +591,19 @@ class TaxonomyService {
 
 				if (name) {
 					throw new AppError(
-						"name must not be supplied while creating a hybrid",
+						"name must not be supplied while creating a cross",
 						400,
 					);
 				}
-				// expect hybrid parents to be species within a genus
+				// expect cross parents to be species within a genus
 				// NO NAME ACCEPTED
 				break;
 			}
 
 			// @note this should be in a 'create genus' function.
 			// and then it can become a parent in other steps instead
-			// case "intergeneric_hybrid":
-			// expect hybrid parents to be genera within a family
+			// case "intergeneric_cross":
+			// expect cross parents to be genera within a family
 			//
 			// break
 			default:
@@ -654,8 +625,8 @@ class TaxonomyService {
 		let parentSpeciesId: number | undefined = undefined;
 		let genusId: number | undefined = undefined;
 		let familyId: number | undefined = undefined;
-		let hybridMomId: number | undefined = undefined;
-		let hybridDadId: number | undefined = undefined;
+		let crossMomId: number | undefined = undefined;
+		let crossDadId: number | undefined = undefined;
 
 		switch (args.submissionType) {
 			case "species": {
@@ -703,28 +674,20 @@ class TaxonomyService {
 						: closestParent.id;
 				familyId = (closestParent as TSpecies).familyId;
 
-				// @todo if parent === genus, root is genus name
-				// otherwise, this happens
 				let root = "";
 				if (args.closestTaxonomicParentType === "genus") {
 					root = closestParent.name;
 				} else {
 					root = await this.getFullSpeciesName(closestParent.id);
 				}
-
-				const capitalizedCultivarName = cultivarName
-					.split(" ")
-					.map((s) => `${s[0]?.toUpperCase()}${s.slice(1)}`)
-					.join(" ");
-				name = `${root} '${capitalizedCultivarName}'`; // @todo is this correct?!?!?!
-				// @todo capitalize each word in cultivarName
+				name = `${root} '${capitalizeFirstLetterInWords(cultivarName)}'`;
 				break;
 			}
-			case "hybrid": {
-				hybridMomId = args.hybridMomId as number;
-				hybridDadId = args.hybridDadId as number;
-				const mom = await this.speciesModel.getById(hybridMomId);
-				const dad = await this.speciesModel.getById(hybridDadId);
+			case "cross": {
+				crossMomId = args.crossMomId as number;
+				crossDadId = args.crossDadId as number;
+				const mom = await this.speciesModel.getById(crossMomId);
+				const dad = await this.speciesModel.getById(crossDadId);
 				if (!mom || !dad) {
 					throw new AppError("mom and dad are required");
 				}
@@ -735,22 +698,8 @@ class TaxonomyService {
 					throw new AppError("could not find genus", 400);
 				}
 
-				const momName = getHybridParentName(mom);
-
-				// mom?.speciesName ||
-				// (mom?.cultivarName
-				// 	? `'${capitalizeFirstLetterInWords(mom.cultivarName)}'`
-				// 	: "");
-				const dadName = getHybridParentName(dad);
-
-				// dad?.speciesName ||
-				// (dad?.cultivarName
-				// 	? `'${capitalizeFirstLetterInWords(dad.cultivarName)}'`
-				// 	: "");
-
-				// if (!momName || !dadName) {
-				// 	throw new AppError("Hybrid parents must have species name set");
-				// }
+				const momName = getCrossParentName(mom);
+				const dadName = getCrossParentName(dad);
 
 				familyId = genus.familyId;
 				name = `${genus.name} ${momName} × ${dadName}`;
@@ -760,30 +709,13 @@ class TaxonomyService {
 			default:
 				throw new AppError("invalid submission type");
 		}
-		/**
-                 * 
-                 * allt som är vetenskapligt  = kursiv, förutom familj haha
-                 * species | cultivar | hybrid | intergeneric_hybrid
-                 * om species:
-                 *  name = genus + name straight up. kapitalisering på släktet, ej art. (kursiv)
-                 * 
-                 * om cultivar:
-                 *  om parent == species NOT CULTIVAR:
-                        species name + name inom single quotes (ej kursiv). varje nytt ord inom det namnet ska vara stor bokstav i början.
-                    om parent == genus:
-                        genus name + name inom quotes (ej kursiv)
-        
-                * om hybrid:
-                    name= genus name + föräldrar gånger varandra. (ordningen spelar roll? den första är honplantan, den andra är hanplantan. viktigt.) INGET SORTNAMN?
-                    ( vi måste spara dessa föräldrarelationer någonstans)
-        
-                    name när visas = baserat på föräldrar, kolumner, outputtas så att det blir single quotes och kursiv där det ska vara.
-                 */
+
+		// @todo EXPAND THIS TO ALL RANKS?!
 		const rank =
 			args.submissionType === "cultivar"
 				? "CULTIVAR"
-				: args.submissionType === "hybrid"
-					? "HYBRID"
+				: args.submissionType === "cross"
+					? "CROSS"
 					: "SPECIES";
 		return {
 			name,
@@ -791,8 +723,8 @@ class TaxonomyService {
 			userSubmitted: true,
 			genusId,
 			parentSpeciesId,
-			hybridDadId,
-			hybridMomId,
+			crossDadId,
+			crossMomId,
 			cultivarName,
 			rank,
 			familyId,
@@ -819,38 +751,25 @@ class TaxonomyService {
 				// scientificPortions.push(closestParentGenus!.name, args.name)
 				break;
 			}
-			case "hybrid": {
-				if (!args.hybridMomId || !args.hybridDadId) {
-					throw new AppError("hybrid mom and dad are required");
+			case "cross": {
+				if (!args.crossMomId || !args.crossDadId) {
+					throw new AppError("cross mom and dad are required");
 				}
-				const mom = await this.speciesModel.getById(args.hybridMomId);
-				const dad = await this.speciesModel.getById(args.hybridDadId);
+				const mom = await this.speciesModel.getById(args.crossMomId);
+				const dad = await this.speciesModel.getById(args.crossDadId);
 				if (!mom || !dad) {
 					throw new AppError("couldnt get mom or dad");
 				}
 				const genus = await this.genusModel.getById(mom?.genusId);
 
 				if (mom?.genusId !== dad?.genusId) {
-					throw new AppError("hybrid parents must share a genus", 400);
+					throw new AppError("cross parents must share a genus", 400);
 				}
-				// @todo refactor into getHybridParentName(species)
-				const momName = getHybridParentName(mom);
 
-				// `${mom?.speciesName ? mom.speciesName : ""} ${
-				// 	mom?.cultivarName
-				// 		? `'${capitalizeFirstLetterInWords(mom.cultivarName)}'`
-				// 		: ""
-				// }`;
-				const dadName = getHybridParentName(dad);
-				// `${dad?.speciesName ? dad.speciesName : ""} ${
-				// 	dad?.cultivarName
-				// 		? `'${capitalizeFirstLetterInWords(dad.cultivarName)}'`
-				// 		: ""
-				// }`;
+				const momName = getCrossParentName(mom);
+				const dadName = getCrossParentName(dad);
 
 				name = `${genus?.name} ${momName} × ${dadName}`;
-
-				// scientificPortions.push(genus!.name, mom!.speciesName, dad!.speciesName)
 				break;
 			}
 			case "cultivar": {
@@ -870,14 +789,7 @@ class TaxonomyService {
 					throw new AppError("closest parent cannot be found");
 				}
 				const cultivarName = args.name as string;
-				// const speciesName = (closestParent as TSpecies).speciesName as string
-				// const parentSpeciesId = closestParent.id
 
-				// const genusId = args.closestTaxonomicParentType === 'species' ? (closestParent as TSpecies).genusId : closestParent.id
-				// const familyId = (closestParent as TSpecies).familyId
-
-				// @todo if parent === genus, root is genus name
-				// otherwise, this happens
 				let root = "";
 				if (args.closestTaxonomicParentType === "genus") {
 					root = closestParent.name;
@@ -885,12 +797,7 @@ class TaxonomyService {
 					root = await this.getFullSpeciesName(closestParent.id);
 				}
 
-				const capitalizedCultivarName = cultivarName
-					.split(" ")
-					.map((s) => `${s[0]?.toUpperCase()}${s.slice(1)}`)
-					.join(" ");
-				// scientificPortions.push(...root.split(' '))
-				name = `${root} '${capitalizedCultivarName}'`; // @todo is this correct?!?!?!
+				name = `${root} '${capitalizeFirstLetterInWords(cultivarName)}'`;
 				break;
 			}
 			default:
@@ -908,7 +815,159 @@ class TaxonomyService {
 		const scientificPortions = getScientificPartsOfName(fullName);
 		return { name: fullName, scientificPortions };
 	}
+
+	public async getClassification(
+		taxonId: number,
+		taxonType: "species" | "genus" | "family",
+	): Promise<Classification> {
+		let family: TFamily | undefined = undefined;
+		let genus: TGenus | undefined = undefined;
+		const classification: Classification = [];
+
+		if (taxonType === "family") {
+			family = await this.familyModel.getById(taxonId);
+			if (!family) {
+				throw new AppError("starting taxon not found");
+			}
+			return [
+				{
+					type: "family",
+					id: family.id,
+					name: family.name,
+					scientificPortions: [],
+				},
+			];
+		}
+		const taxon =
+			taxonType === "genus"
+				? await this.genusModel.getById(taxonId)
+				: await this.speciesModel.getById(taxonId);
+		if (!taxon) {
+			throw new AppError("starting taxon not found");
+		}
+		if (taxonType === "genus") {
+			genus = taxon as TGenus;
+		} else {
+			genus = await this.genusModel.getById((taxon as TSpecies).genusId);
+		}
+
+		family = await this.familyModel.getById(taxon.familyId);
+		if (!family) {
+			throw new AppError("family not found");
+		}
+		classification.push({
+			type: "family",
+			id: family.id,
+			name: family.name,
+			scientificPortions: [],
+		});
+		if (!genus) {
+			throw new AppError("genus not found");
+		}
+		// const classification: Classification = {
+		// 	family: { type: "family", id: family.id, name: family.name },
+		// 	genus: { type: "genus", id: genus.id, name: genus.name },
+		// };
+		classification.push({
+			type: "genus",
+			id: genus.id,
+			name: genus.name,
+			scientificPortions: [genus.name],
+		});
+		if (taxonType === "genus") {
+			return classification;
+		}
+
+		const spec: TSpecies = taxon as TSpecies;
+		if (spec.rank === "CROSS") {
+			const { scientificPortions } = await this.getScientificallySplitName(
+				spec.id,
+			);
+			classification.push({
+				type: "species",
+				name: spec.name,
+				id: spec.id,
+				rank: spec.rank,
+				scientificPortions,
+			});
+			return classification;
+		}
+
+		if (spec.rank === "SPECIES") {
+			const { scientificPortions } = await this.getScientificallySplitName(
+				spec.id,
+			);
+			classification.push({
+				type: "species",
+				name: spec.name,
+				id: spec.id,
+				rank: spec.rank,
+				scientificPortions: scientificPortions,
+			});
+			return classification;
+		}
+
+		const parentSpeciesList = await this.getParentSpeciesList(spec);
+		parentSpeciesList.reverse();
+
+		classification.push(...parentSpeciesList);
+		return classification;
+	}
+	// public async getImmediateFamily(taxonId: number, taxonType: 'species' | 'genus' | 'family'): Promise<ImmediateFamily> {
+
+	// }
+	private async getParentSpeciesList(
+		spec: TSpecies,
+		list: AbbreviatedTaxon[] = [],
+	): Promise<AbbreviatedTaxon[]> {
+		if (!spec.parentSpeciesId) {
+			return list;
+		}
+		const parent = await this.speciesModel.getById(spec.parentSpeciesId);
+		if (!parent) {
+			throw new AppError(`cannot find parent for species ${spec.id}`);
+		}
+		const { scientificPortions } = await this.getScientificallySplitName(
+			parent.id,
+		);
+
+		list.push({
+			type: "species",
+			name: parent.name,
+			id: parent.id,
+			rank: parent.rank as AbbreviatedTaxon["rank"],
+			scientificPortions,
+		});
+		return this.getParentSpeciesList(parent, list);
+	}
 }
+
+interface AbbreviatedTaxon {
+	type: "family" | "genus" | "species";
+	id: number;
+	name: string;
+	rank?: "CROSS" | "SPECIES" | "VARIETY" | "SUBSPECIES" | "CULTIVAR";
+	scientificPortions: string[];
+}
+type Classification = AbbreviatedTaxon[];
+
+// interface Classification {
+// 	family: AbbreviatedTaxon;
+// 	genus?: AbbreviatedTaxon;
+// 	species?: AbbreviatedTaxon;
+// 	subSpecies?: AbbreviatedTaxon;
+// 	variety?: AbbreviatedTaxon;
+// 	cross?: AbbreviatedTaxon;
+// 	cultivar?: AbbreviatedTaxon;
+// }
+
+type Taxon = TSpecies | TGenus | TFamily;
+// interface ImmediateFamily {
+// 	self: Taxon
+// 	siblings: Taxon[]
+// 	parents: Taxon[]
+// 	children: Taxon[]
+// }
 
 function capitalizeFirstLetterInWords(s: string): string {
 	return s
@@ -932,7 +991,6 @@ export interface HydratedGenusSearchResult {
 }
 
 function getScientificPartsOfName(name: string): string[] {
-	console.log("name:", name);
 	const splitName = name.split(/\s+(?=(?:[^']*'[^']*')*[^']*$)/);
 	const scientificPortions: string[] = [];
 	for (let substr of splitName) {
@@ -948,7 +1006,7 @@ function getScientificPartsOfName(name: string): string[] {
 	return scientificPortions;
 }
 
-function getHybridParentName(species?: TSpecies): string {
+function getCrossParentName(species?: TSpecies): string {
 	if (!species) {
 		throw new AppError("species not defined");
 	}
@@ -962,7 +1020,7 @@ function getHybridParentName(species?: TSpecies): string {
 	}
 	if (!name) {
 		throw new AppError(
-			`hybrid parent name not defined for species with id: ${species.id}`,
+			`cross parent name not defined for species with id: ${species.id}`,
 		);
 	}
 	return name;
