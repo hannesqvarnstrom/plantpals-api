@@ -5,15 +5,15 @@ import { AppError } from "../utils/errors"
 
 export type RawUser = InferSelectModel<typeof users>
 export type TUserCreateArgs = InferInsertModel<typeof users>
-export type TUser = Omit<RawUser, 'password'>
+export type TUser = Omit<RawUser, 'password' | 'email'>
 
 export default class UserModel {
     constructor() {
     }
 
     public static factory(params: RawUser): TUser {
-        const { email, id, lastLogAt } = params
-        return { email, id, lastLogAt }
+        const { email, id, lastLogAt, username } = params
+        return { id, lastLogAt, username }
     }
 
     /**
@@ -49,6 +49,7 @@ export default class UserModel {
     }
 
     public async updateById(id: number, payload: { password?: string, lastLogAt?: Date } = {}) {
+        console.log('payload', payload)
         const q = dbManager.db.update(users)
             .set(payload)
             .where(

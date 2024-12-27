@@ -32,7 +32,8 @@ export const registerSchema = z.object({
     // body: z.object({
     email: z.string().email('Not a valid email'),
     password: z.string().min(6),
-    passwordConfirmation: z.string().min(6)
+    passwordConfirmation: z.string().min(6),
+    username: z.string().min(4),
     // })
 }).superRefine(({ password, passwordConfirmation }, ctx) => {
     // const { } = body
@@ -68,7 +69,8 @@ export const updateMeSchema = z.object({
     // body: z.object({
     oldPassword: z.string().min(6).optional(),
     newPassword: z.string().min(6).optional(),
-    newPasswordConfirmation: z.string().min(6).optional()
+    newPasswordConfirmation: z.string().min(6).optional(),
+    username: z.string().min(4),
     // })
 }).superRefine(({ oldPassword, newPassword, newPasswordConfirmation }, ctx) => {
     const issues: z.IssueData[] = []
@@ -128,36 +130,37 @@ export const putPlantSchema = z.object({
 })
 
 export const postPlantSchema = z.object({
-    name: z.object({
-        genusName: z.string({ required_error: 'Genus name is required' }),
-        speciesName: z.string().optional(),
-        varietyName: z.string().optional(),
-        name1a: z.object({
-            species: z.boolean().optional(),
-            name: z.string().optional()
-        }
-        ).optional(),
-        name1b: z.object({
-            species: z.boolean().optional(),
-            name: z.string().optional()
-        }
-        ).optional(),
-        name2a: z.object({
-            species: z.boolean().optional(),
-            name: z.string().optional()
-        }
-        ).optional(),
-        name2b: z.object({
-            species: z.boolean().optional(),
-            name: z.string().optional()
-        }
-        ).optional()
-    }),
+    // name: z.object({
+    //     genusName: z.string({ required_error: 'Genus name is required' }),
+    //     speciesName: z.string().optional(),
+    //     varietyName: z.string().optional(),
+    //     name1a: z.object({
+    //         species: z.boolean().optional(),
+    //         name: z.string().optional()
+    //     }
+    //     ).optional(),
+    //     name1b: z.object({
+    //         species: z.boolean().optional(),
+    //         name: z.string().optional()
+    //     }
+    //     ).optional(),
+    //     name2a: z.object({
+    //         species: z.boolean().optional(),
+    //         name: z.string().optional()
+    //     }
+    //     ).optional(),
+    //     name2b: z.object({
+    //         species: z.boolean().optional(),
+    //         name: z.string().optional()
+    //     }
+    //     ).optional()
+    // }),
     // userId: z.number(),
-    fontSize: z.string().optional(),
-    fromTrader: z.string().optional().nullable(),
-    type: z.enum(['cutting', 'seed', 'rhizome', 'none']),
-    location: z.string().nullable().optional(),
+    // fontSize: z.string().optional(),
+    // fromTrader: z.string().optional().nullable(),
+    type: z.enum(['cutting', 'seed', 'rhizome', 'none', 'plant']),
+    speciesId: z.number(),
+    // location: z.string().nullable().optional(),
 
 })
 // export const getPlantSchema = z.object({
@@ -173,6 +176,29 @@ export const postPlantSchema = z.object({
 //     value: z.number().min(1).max(MAX_RATING_VALUE),
 // }).strict()
 
+/**
+ * @route /taxonomy/species/search
+ * @method GET
+ */
+export const speciesSearchSchema = z.object({
+    q: z.string(),
+    excludeRank: z.enum(['HYBRID', 'CULTIVAR', 'SPECIES']).optional(),
+    page: z.number().optional(),
+    familyId: z.number().optional(),
+    genusId: z.number().optional(),
+    speciesId: z.number().optional(),
+    onlyAccepted: z.boolean().optional(),
+})
+
+export const genusSearchSchema = z.object({
+    q: z.string(),
+    page: z.number().optional(),
+    familyId: z.number().optional(),
+    genusId: z.number().optional(),
+    speciesId: z.number().optional(),
+    onlyAccepted: z.boolean().optional(),
+})
+
 export const postTraderSchema = z.object({
     name: z.string(),
     location: z.string().optional()
@@ -181,4 +207,31 @@ export const postTraderSchema = z.object({
 export const putTraderSchema = z.object({
     name: z.string(),
     location: z.string().optional()
+})
+
+
+export const postTradeSchema = z.object({
+    plantOfferedId: z.number(),
+    plantDesiredId: z.number(),
+})
+
+export const postSpeciesSubmissionSchema = z.object({
+    closestTaxonomicParent: z.number().optional(),
+    closestTaxonomicParentType: z.enum(['family', 'genus', 'species']).optional(),
+    submissionType: z.enum(['species', 'cultivar', 'hybrid', /*'intergeneric_hybrid'*/]),
+    hybridMomId: z.number().optional(),
+    hybridDadId: z.number().optional(),
+    name: z.string().optional(), // om submissionType == hybrid så är det optional
+
+    // @todo add parents in same UI view, few clicks, made easy.
+    // extra grouping here? grex or whatever?
+})
+
+export const getNamePreviewSchema = z.object({
+    submissionType: z.enum(['hybrid', 'species', 'cultivar']),
+    hybridMomId: z.number().optional(),
+    hybridDadId: z.number().optional(),
+    closestTaxonomicParent: z.number().optional(),
+    closestTaxonomicParentType: z.enum(['family', 'genus', 'species']).optional(),
+    name: z.string().optional(), // om submissionType == hybrid så är det optional
 })

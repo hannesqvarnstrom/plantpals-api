@@ -1,5 +1,5 @@
 import { scrapeAllBase, scrapeFamilyDataAll, scrapeFamilyNames, scrapeFamilySpecific } from "./scrape-families"
-
+import initSpeciesNames from './commands/init-speciesnames'
 
 function run(scriptName: string, otherArgs?: string[]) {
     if (!scriptName) {
@@ -23,6 +23,9 @@ function run(scriptName: string, otherArgs?: string[]) {
             break
         case 'scrape-genera-species-all':
             scrapeAllBase()
+            break
+        case 'init-species-names':
+            initSpeciesNames()
             break
         default:
             throw new Error('script name not recognized:' + scriptName)

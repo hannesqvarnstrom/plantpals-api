@@ -24,10 +24,10 @@ export const errorHandler = (err: any, _req: Request, res: Response, next: NextF
     } else {
         err.status = err.status || 'error'
         err.statusCode = err.statusCode || 500
-        return res.status(err.statusCode).json({
-            status: err.status,
-            message: err.message
-        })
+
+        return res.status(err.statusCode).send(
+            err.message
+        )
     }
 }
 

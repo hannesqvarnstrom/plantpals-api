@@ -57,6 +57,25 @@ export const requireJwt = async <Params>(req: Request<Params>, _res: Response, n
 
 }
 
+export const allowJwtButNotRequire = async <Params, Body>(req: Request<Params, Body>, _res: Response, next: NextFunction) => {
+    try {
+        const authString = req.headers.authorization ?? req.headers.Authorization as string
+        if (!authString) return next()
+        const token = authString.substring(authString.indexOf('Bearer ') + 6, authString.length).trim()
+        if (!token) return next()
+
+        const jwtPayload = verifyJwt<JwtPayload>(token)
+        if (!jwtPayload) return next()
+
+        req.jwtPayload = jwtPayload
+        return next()
+    } catch (error) {
+        console.log('error:', error)
+        next(error)
+    }
+
+}
+
 export type JwtPayload = {
     userId: number,
     expiresIn: string

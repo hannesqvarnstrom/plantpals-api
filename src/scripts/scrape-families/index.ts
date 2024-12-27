@@ -38,8 +38,13 @@ export async function scrapeFamilyDataAll() {
         console.log('making request for ' + familyName)
         const { data: familyRequestData } = await makeRequest("https://api.gbif.org/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&q=" + familyName)
         console.log('request complete')
-        const likelyFamilyData = familyRequestData.results[0]
-        familyData.push(likelyFamilyData)
+        const likelyfamily = familyRequestData.results.find((item: TaxonomicRecord) => item.rank === 'FAMILY' && item.taxonomicStatus === 'ACCEPTED')
+        if (!likelyfamily) {
+            throw new Error('unable to find data for family ' + familyName)
+
+        }
+
+        familyData.push(likelyfamily)
         i++
     }
     console.log('writing to file...')

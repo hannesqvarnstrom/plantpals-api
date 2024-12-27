@@ -1,16 +1,18 @@
 import { Router } from "express"
+
 import usersRouter from "./users"
-// import moodRatingRouter from "./mood-rating"
 import envVars from "../utils/environment"
-// import plantsRouter from "./plants"
-// import tradersRouter from "./traders"
+import authRouter from "./auth"
+import taxonomyRouter from "./taxonomy"
+import plantsRouter from "./plants"
+import tradingRouter from "./trading"
+import interestsRouter from "./interests"
 
 const router = Router()
 
 router.use((_req, res, next) => {
     res.set('content-type', 'application/json')
     if (envVars.isDev()) {
-        // res.set('Access-Control-Allow-Origin', 'http://localhost:5173')
         console.log('Getting request at url', _req.url)
     }
 
@@ -23,27 +25,51 @@ router.get('/', (_req, res) => {
 
 /**
  * Users 
- * - POST /register, 
- * - POST /login, 
- * - GET /me,
- * - PUT /me,
- * 
- * - GET /auth/google
- * - GET /auth/google/redirect
+ * - GET /me
+ * - PUT /me
+ * - GET /:userId/interests
+ * - GET /:userId/collection
  */
-router.use(usersRouter)
-
-// router.use('/traders', tradersRouter)
+router.use('/users', usersRouter)
 
 /**
  * Plants
- * (All endpoints are JWT protected)
- * - GET /plants,
- * - GET /plants/:plantId,
- * - POST /plants,
- * - PUT /plants/:plantId
- * - DELETE /plants/:plantId
+ * - GET /
+ * - POST /
+ * - POST /:plantId/tradeable
+ * - DELETE /:plantId/tradeable
  */
-// router.use('/plants', plantsRouter)
+router.use('/plants', plantsRouter)
+
+/**
+ * - POST /register, 
+ * - POST /login, 
+ * - GET /google
+ * - GET /google/redirect
+ */
+router.use('/auth', authRouter)
+
+/**
+ * Taxonomy (@todo refactor)
+ * - GET /species/search
+ * - GET /species/hydrated-search
+ * - GET /species/:speciesId/trades/possible
+ * - POST /species/:speciesId/interests
+ * - DELETE /species/:speciesId/interests
+ */
+router.use('/taxonomy', taxonomyRouter)
+
+/**
+ * Trading
+ * - POST /
+ */
+router.use('/trading', tradingRouter)
+
+/**
+ * Interests
+ * - GET /
+ */
+router.use('/interests', interestsRouter)
 
 export default router
+

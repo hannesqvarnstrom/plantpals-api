@@ -1,13 +1,21 @@
-import dbManager from "../db"
-import { species, users, userSpeciesSubmissions } from "../db/schema"
-import { and, between, eq, InferColumnsDataTypes, InferInsertModel, InferSelectModel, sql, inArray } from 'drizzle-orm'
-import { AppError } from "../utils/errors"
-import { PlantTypeCol } from "../services/plant"
+import dbManager from "../db";
+import { species, users, userSpeciesSubmissions } from "../db/schema";
+import {
+    and,
+    between,
+    eq,
+    InferColumnsDataTypes,
+    InferInsertModel,
+    InferSelectModel,
+    sql,
+    inArray,
+} from "drizzle-orm";
+import { AppError } from "../utils/errors";
+import { PlantTypeCol } from "../services/plant";
 
-export type RawSpecies = InferSelectModel<typeof species>
-export type TSpeciesCreateArgs = InferInsertModel<typeof species>
-export type TSpecies = RawSpecies
-
+export type RawSpecies = InferSelectModel<typeof species>;
+export type TSpeciesCreateArgs = InferInsertModel<typeof species>;
+export type TSpecies = RawSpecies;
 
 // export interface ShallowPlant {
 //     name: string
@@ -46,60 +54,114 @@ export type TSpecies = RawSpecies
 //     id: string,
 // }
 
-
 export default class SpeciesModel {
-    constructor() {
-
-    }
+    constructor() { }
 
     public static factory(params: RawSpecies): TSpecies {
-        const { id, name, gbifKey, vernacularNames, familyId, genusId, gbifGenusKey, gbifFamilyKey, rank, userSubmitted, parentSpeciesId, createdAt } = params
-        return { id, name, gbifKey, vernacularNames, familyId, genusId, gbifGenusKey, gbifFamilyKey, rank, userSubmitted, parentSpeciesId, createdAt }
+        const {
+            id,
+            name,
+            gbifKey,
+            vernacularNames,
+            familyId,
+            genusId,
+            gbifGenusKey,
+            gbifFamilyKey,
+            rank,
+            userSubmitted,
+            parentSpeciesId,
+            speciesName,
+            cultivarName,
+            hybridMomId,
+            hybridDadId,
+            createdAt,
+        } = params;
+        return {
+            id,
+            name,
+            gbifKey,
+            vernacularNames,
+            familyId,
+            genusId,
+            speciesName,
+            cultivarName,
+            hybridMomId,
+            hybridDadId,
+            gbifGenusKey,
+            gbifFamilyKey,
+            rank,
+            userSubmitted,
+            parentSpeciesId,
+            createdAt,
+        };
     }
 
     public async create(args: TSpeciesCreateArgs): Promise<TSpecies> {
-        const query = dbManager.db.insert(species)
+        const query = dbManager.db
+            .insert(species)
             .values(args)
             .returning()
-            .prepare(
-                'createSpecies' + new Date().getTime()
-            )
+            .prepare("createSpecies" + new Date().getTime());
 
-        const [result, ..._] = await query.execute()
+        const [result, ..._] = await query.execute();
         if (!result) {
-            throw new AppError('Something went wrong while creating species', 400)
+            throw new AppError("Something went wrong while creating species", 400);
         }
 
-        return result
+        return result;
     }
 
-    public async getById<B extends boolean = true>(id: number, require: B): Promise<TSpecies>
-    public async getById(id: number): Promise<TSpecies | undefined>
+    public async getById<B extends boolean = true>(
+        id: number,
+        require: B
+    ): Promise<TSpecies>;
+    public async getById(id: number): Promise<TSpecies | undefined>;
     public async getById<B extends boolean = false>(id: number, require?: B) {
-        const query = dbManager.db.select()
+        const query = dbManager.db
+            .select()
             .from(species)
             .where(eq(species.id, id))
-            .prepare('getBySpeciesId' + new Date().getTime())
+            .prepare("getBySpeciesId" + new Date().getTime());
 
-        const [result, ..._] = await query.execute()
+        const [result, ..._] = await query.execute();
 
         if (result) {
-            const plant = SpeciesModel.factory(result)
-            return plant
+            const plant = SpeciesModel.factory(result);
+            return plant;
         } else {
-            if (require) throw new AppError('Species not found', 404)
-            return undefined
+            if (require) throw new AppError("Species not found", 404);
+            return undefined;
         }
     }
 
     public async getByUserId(userId: number): Promise<TSpecies[]> {
-        const [user, ..._] = await dbManager.db.select().from(users).where(eq(users.id, userId)).execute()
+        const [user, ..._] = await dbManager.db
+            .select()
+            .from(users)
+            .where(eq(users.id, userId))
+            .execute();
         if (!user) {
-            throw new AppError('missing user', 404)
+            throw new AppError("missing user", 404);
         }
-        const submissions: { speciesId: number }[] = await dbManager.db.select({ speciesId: userSpeciesSubmissions.speciesId }).from(userSpeciesSubmissions).rightJoin(userSpeciesSubmissions, eq(userSpeciesSubmissions.userId, userId)).execute()
-        const userSpecies = await dbManager.db.select().from(species).where(inArray(species.id, submissions.map(x => x.speciesId))).execute()
-        return userSpecies
+        const submissions: { speciesId: number }[] = await dbManager.db
+            .select({ speciesId: userSpeciesSubmissions.speciesId })
+            .from(userSpeciesSubmissions)
+            .rightJoin(
+                userSpeciesSubmissions,
+                eq(userSpeciesSubmissions.userId, userId)
+            )
+            .execute();
+        const userSpecies = await dbManager.db
+            .select()
+            .from(species)
+            .where(
+                inArray(
+                    species.id,
+                    submissions.map((x) => x.speciesId)
+                )
+            )
+            .execute();
+        return userSpecies;
     }
 
     /**

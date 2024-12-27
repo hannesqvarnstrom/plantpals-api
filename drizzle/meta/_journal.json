@@ -43,6 +43,48 @@
       "when": 1732019869650,
       "tag": "0005_nifty_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1732022648200,
+      "tag": "0006_shocking_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1733234632732,
+      "tag": "0007_cultured_carnage",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1733837395209,
+      "tag": "0008_massive_warpath",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1733907227116,
+      "tag": "0009_damp_machine_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1734080546195,
+      "tag": "0010_famous_red_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1734610482726,
+      "tag": "0011_fantastic_meggan",
+      "breakpoints": true
     }
   ]
 }

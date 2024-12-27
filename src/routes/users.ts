@@ -1,50 +1,28 @@
 import { Response, Router } from 'express'
-import authService, { OAuthProvider } from "../services/authentication"
 import { JWTExpiresIn, requireJwt, signJwt } from "../middleware/jwt"
-import { loginSchema, oauthGooglePostSchema, registerSchema, updateMeSchema } from "./schemas"
+import { updateMeSchema } from "./schemas"
 import userService from "../services/user"
 import { TUser } from '../models/user'
-import { AppError } from '../utils/errors'
-import oauthService from '../services/oauth'
 import { validateRequest } from 'zod-express-middleware'
+import plantService from '../services/plant'
 
 const usersRouter = Router()
-
-usersRouter.post('/register', validateRequest({ body: registerSchema }), async (req, res, next) => {
-    try {
-        const user = await userService.createUser(req.body)
-        return res.status(201).send(user)
-    } catch (e) {
-        return next(e)
-    }
-})
-
-const signAndSendUserToken = (user: TUser, res: Response) => {
-    const token = signJwt(user.id)
-    return res.status(200).send({
-        token,
-        userId: user.id,
-        expiresAt: new Date().setTime(new Date().getTime() + (JWTExpiresIn * 1000)),
-        expiresIn: JWTExpiresIn,
-        logOverdue: userService.logOverdue(user, new Date())
-    })
-}
-
-usersRouter.post('/login', validateRequest({ body: loginSchema }), async (req, res, next) => {
-    try {
-        const user = await authService.attemptPasswordLogin(req.body)
-        return signAndSendUserToken(user, res)
-    } catch (e) {
-        return next(e)
-    }
-})
 
 usersRouter.get('/me', requireJwt, async (req, res, next) => {
     try {
         const userId = req.jwtPayload?.userId as number
-        const me = await userService.getById(userId)
+        const userInfo = await userService.getById(userId)
+        const plantCollection = await plantService.getUserCollection(userId)
+        // const interests = await userService.getInterests(userId)
+        // const mappedInterests = {
+        //     species: interests.userSpeciesInterests,
+        //     genera: interests.userGenusInterests,
+        //     families: interests.userFamilyInterests
+        // }
 
-        return res.send({ me })
+        return res.send({ userInfo, plantCollection })
+
+
     } catch (e) { return next(e) }
 })
 
@@ -59,58 +37,27 @@ usersRouter.put('/me', requireJwt, validateRequest({ body: updateMeSchema }), as
     }
 })
 
-
-/**
- * OAUTH ENDPOINTS
- */
-
-/**
- * Client initiated
- */
-/**
- * Google
- */
-usersRouter.post('/auth/google', validateRequest({ body: oauthGooglePostSchema }), async (req, res, next) => {
-    const {
-        providerToken,
-    } = req.body
-
+usersRouter.get('/:userId/interests', requireJwt, async (req, res, next) => {
     try {
-        const { email, id } = await oauthService.verifyGoogleToken(providerToken)
 
-        const userIdentity = await authService.findUserIdentity(id, 'GOOGLE')
-        if (userIdentity) {
-            const user = await userService.getById(userIdentity.userId)
-            return signAndSendUserToken(user, res)
-        } else {
-            if (email) {
-                let user = await userService.getByEmail(email)
+        const { userId } = req.params
 
-                if (!user) {
-                    user = await userService.createUser({ email })
-                } else {
-                    // @todo - if user already exists in the app, 
-                    // force them to input their existing password to link the accounts
-                    return res.status(200).send({
-                        action: 'prompt_normal_login',
-                    })
-                }
-
-                const identityPayload = {
-                    provider: 'GOOGLE' as OAuthProvider,
-                    providerId: id,
-                    userId: user.id
-                }
-
-                await authService.createUserIdentity(identityPayload)
-                return signAndSendUserToken(user, res)
-            } else {
-                throw new AppError('Missing an Email-address for Oauth Login', 400)
-            }
-        }
+        const interests = await userService.getInterests(Number(userId))
+        return res.send(interests)
     } catch (e) {
         return next(e)
     }
 })
+
+usersRouter.get('/collection', requireJwt, async (req, res, next) => {
+    try {
+        const user = await userService.getById(req.jwtPayload!.userId)
+        const collection = await plantService.getUserCollection(user)
+        return res.send(collection)
+    } catch (e) {
+        return next(e)
+    }
+})
+
 
 export default usersRouter

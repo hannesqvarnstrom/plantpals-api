@@ -3,8 +3,9 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { Pool } from 'pg'
 import envVars from '../utils/environment'
 import { sql } from 'drizzle-orm'
+import { Schema } from './schema'
 
-export type DB = NodePgDatabase<Record<string, unknown>>
+export type DB = NodePgDatabase<typeof Schema>
 
 export class DatabaseManager {
     db: DB
@@ -17,7 +18,7 @@ export class DatabaseManager {
     private connect(connectionString: string) {
         const pool = new Pool({ connectionString })
         this.pool = pool
-        this.db = drizzle(pool)
+        this.db = drizzle(pool, { schema: Schema })
         return this
     }
 

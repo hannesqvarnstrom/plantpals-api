@@ -8,6 +8,7 @@ services:
       - .:/usr/src # change this?
       # - /usr/src/app/node_modules
     command: npm run dev # ?
+        
     depends_on:
       - postgres
     environment:
