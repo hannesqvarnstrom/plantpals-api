@@ -124,10 +124,14 @@ export const species = pgTable(
 	}),
 );
 
-export const speciesRelations = relations(species, ({ one }) => ({
+export const speciesRelations = relations(species, ({ one, many }) => ({
 	parentSpecies: one(species, {
 		fields: [species.parentSpeciesId],
 		references: [species.id],
+		relationName: "childSpecies",
+	}),
+	childSpecies: many(species, {
+		relationName: "childSpecies",
 	}),
 	crossMom: one(species, {
 		fields: [species.crossMomId],
@@ -136,6 +140,28 @@ export const speciesRelations = relations(species, ({ one }) => ({
 	crossDad: one(species, {
 		fields: [species.crossDadId],
 		references: [species.id],
+	}),
+	genus: one(genera, {
+		fields: [species.genusId],
+		references: [genera.id],
+		relationName: "allSpecies",
+	}),
+}));
+
+export const familyRelations = relations(families, ({ many }) => ({
+	genera: many(genera, {
+		relationName: "genera",
+	}),
+}));
+
+export const generaRelations = relations(genera, ({ one, many }) => ({
+	family: one(families, {
+		fields: [genera.familyId],
+		references: [families.id],
+		relationName: "genera",
+	}),
+	allSpecies: many(species, {
+		relationName: "allSpecies",
 	}),
 }));
 
@@ -279,4 +305,6 @@ export const Schema = {
 	tradeStatusTypes,
 	tradeRelations,
 	speciesRelations,
+	familyRelations,
+	generaRelations,
 };

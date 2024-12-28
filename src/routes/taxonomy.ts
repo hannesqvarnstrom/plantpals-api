@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { validateRequest } from "zod-express-middleware";
+import dbManager from "../db";
 import { allowJwtButNotRequire, requireJwt } from "../middleware/jwt";
 import taxonomyService from "../services/taxonomy";
 import userService from "../services/user";
@@ -7,6 +8,7 @@ import { AppError } from "../utils/errors";
 import {
 	genusSearchSchema,
 	getClassificationSchema,
+	getLowerTaxaSchema,
 	getNamePreviewSchema,
 	postSpeciesSubmissionSchema,
 	speciesSearchSchema,
@@ -64,6 +66,22 @@ taxonomyRouter.get(
 		}
 	},
 );
+
+taxonomyRouter.get("/families", async (req, res, next) => {
+	try {
+		const families = await dbManager.db.query.families.findMany();
+		return res.send(
+			families.map((fam) => ({
+				id: fam.id,
+				name: fam.name,
+				type: "family",
+				scientificPortions: [],
+			})),
+		);
+	} catch (e) {
+		return next(e);
+	}
+});
 
 taxonomyRouter.get("/family/:familyId", async (req, res, next) => {
 	try {
@@ -149,6 +167,22 @@ taxonomyRouter.get(
 			return res.send(results);
 
 			// }, 1000)
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
+taxonomyRouter.get(
+	"/lower-taxa",
+	allowJwtButNotRequire,
+	validateRequest<typeof getLowerTaxaSchema>({ query: getLowerTaxaSchema }),
+	async (req, res, next) => {
+		try {
+			const lowerTaxa = await taxonomyService.getLowerTaxa(
+				Number.parseInt(req.query.taxonId),
+				req.query.taxonType,
+			);
+			return res.send(lowerTaxa);
 		} catch (e) {
 			return next(e);
 		}

@@ -228,6 +228,11 @@ export const getClassificationSchema = z.object({
 	taxonType: z.enum(["family", "genus", "species"]),
 });
 
+export const getLowerTaxaSchema = z.object({
+	taxonId: z.string(),
+	taxonType: z.enum(["family", "genus", "species"]),
+});
+
 export const postTraderSchema = z.object({
 	name: z.string(),
 	location: z.string().optional(),

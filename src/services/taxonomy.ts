@@ -940,6 +940,80 @@ class TaxonomyService {
 		});
 		return this.getParentSpeciesList(parent, list);
 	}
+
+	public async getLowerTaxa(
+		taxonId: number,
+		taxonType: "species" | "genus" | "family",
+	): Promise<AbbreviatedTaxon[]> {
+		const lowerTaxa: AbbreviatedTaxon[] = [];
+		if (taxonType === "family") {
+			const family = await dbManager.db.query.families.findFirst({
+				where: eq(families.id, taxonId),
+				with: {
+					genera: true,
+				},
+			});
+			if (!family) {
+				throw new AppError("cannot find taxon");
+			}
+
+			for (const genus of family.genera) {
+				lowerTaxa.push({
+					type: "genus",
+					id: genus.id,
+					name: genus.name,
+					scientificPortions: [genus.name],
+				});
+			}
+		} else if (taxonType === "genus") {
+			const genus = await dbManager.db.query.genera.findFirst({
+				where: eq(genera.id, taxonId),
+				with: {
+					allSpecies: true,
+				},
+			});
+			if (!genus) {
+				throw new AppError("cannot find taxon");
+			}
+			for (const spec of genus.allSpecies) {
+				const { scientificPortions } = await this.getScientificallySplitName(
+					spec.id,
+				);
+				lowerTaxa.push({
+					type: "species",
+					id: spec.id,
+					name: spec.name,
+					rank: spec.rank as AbbreviatedTaxon["rank"],
+					scientificPortions,
+				});
+			}
+		} else {
+			const speciesWithData = await dbManager.db.query.species.findFirst({
+				where: eq(species.id, taxonId),
+				with: {
+					childSpecies: true,
+				},
+			});
+
+			if (!speciesWithData) {
+				throw new AppError("cannot find taxon");
+			}
+			for (const lowerSpec of speciesWithData.childSpecies) {
+				const { scientificPortions } = await this.getScientificallySplitName(
+					lowerSpec.id,
+				);
+				lowerTaxa.push({
+					type: "species",
+					id: lowerSpec.id,
+					name: lowerSpec.name,
+					rank: lowerSpec.rank as AbbreviatedTaxon["rank"],
+					scientificPortions,
+				});
+			}
+		}
+
+		return lowerTaxa;
+	}
 }
 
 interface AbbreviatedTaxon {
@@ -995,7 +1069,6 @@ function getScientificPartsOfName(name: string): string[] {
 	const scientificPortions: string[] = [];
 	for (let substr of splitName) {
 		substr = substr.replace(/\(|\)/g, "");
-		console.log("substr", substr);
 		const isScientific =
 			!substr.startsWith("'") && !substr.endsWith("'") && substr !== "×";
 		if (isScientific) {
