@@ -250,6 +250,7 @@ taxonomyRouter.post("/species/:speciesId/interests", async (req, res, next) => {
 			throw new AppError("no user");
 		}
 		await taxonomyService.setNewInterest(
+			"species",
 			Number(req.params.speciesId),
 			req.user,
 		);
@@ -266,6 +267,7 @@ taxonomyRouter.delete(
 				throw new AppError("no user");
 			}
 			await taxonomyService.removeInterest(
+				"species",
 				Number(req.params.speciesId),
 				req.user,
 			);
@@ -275,6 +277,68 @@ taxonomyRouter.delete(
 		}
 	},
 );
+
+taxonomyRouter.post("/genus/:genusId/interests", async (req, res, next) => {
+	try {
+		if (!req.user) {
+			throw new AppError("no user");
+		}
+		await taxonomyService.setNewInterest(
+			"genus",
+			Number(req.params.genusId),
+			req.user,
+		);
+		return res.status(201).send();
+	} catch (e) {
+		return next(e);
+	}
+});
+taxonomyRouter.delete("/genus/:genusId/interests", async (req, res, next) => {
+	try {
+		if (!req.user) {
+			throw new AppError("no user");
+		}
+		await taxonomyService.removeInterest(
+			"genus",
+			Number(req.params.genusId),
+			req.user,
+		);
+		return res.status(201).send();
+	} catch (e) {
+		return next(e);
+	}
+});
+
+taxonomyRouter.post("/family/:familyId/interests", async (req, res, next) => {
+	try {
+		if (!req.user) {
+			throw new AppError("no user");
+		}
+		await taxonomyService.setNewInterest(
+			"family",
+			Number(req.params.familyId),
+			req.user,
+		);
+		return res.status(201).send();
+	} catch (e) {
+		return next(e);
+	}
+});
+taxonomyRouter.delete("/family/:familyId/interests", async (req, res, next) => {
+	try {
+		if (!req.user) {
+			throw new AppError("no user");
+		}
+		await taxonomyService.removeInterest(
+			"family",
+			Number(req.params.familyId),
+			req.user,
+		);
+		return res.status(201).send();
+	} catch (e) {
+		return next(e);
+	}
+});
 
 taxonomyRouter.post(
 	"/species/submissions",

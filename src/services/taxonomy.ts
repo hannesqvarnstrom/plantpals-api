@@ -3,7 +3,9 @@ import type { z } from "zod";
 import dbManager from "../db";
 import {
 	families,
+	familyInterests,
 	genera,
+	genusInterests,
 	plants,
 	species,
 	speciesInterests,
@@ -195,72 +197,234 @@ class TaxonomyService {
 		return mappedResults;
 	}
 
-	public async setNewInterest(speciesId: number, user: TUser): Promise<void> {
-		const [interestSpecies, ..._] = await dbManager.db
-			.select({
-				id: species.id,
-				interested: sql<boolean>`(${speciesInterests.id}) IS NOT NULL`,
-			})
-			.from(species)
-			.where(eq(species.id, speciesId))
-			.leftJoin(
-				speciesInterests,
-				and(
-					eq(speciesInterests.speciesId, speciesId),
-					eq(speciesInterests.userId, user.id),
-				),
-			);
+	public async setNewInterest(
+		taxonType: "family" | "genus" | "species",
+		taxonId: number,
+		user: TUser,
+	): Promise<void> {
+		switch (taxonType) {
+			case "species": {
+				const [interest, ..._] = await dbManager.db
+					.select({
+						id: species.id,
+						interested: sql<boolean>`(${speciesInterests.id}) IS NOT NULL`,
+					})
+					.from(species)
+					.where(eq(species.id, taxonId))
+					.leftJoin(
+						speciesInterests,
+						and(
+							eq(speciesInterests.speciesId, taxonId),
+							eq(speciesInterests.userId, user.id),
+						),
+					);
 
-		if (!interestSpecies) {
-			throw new AppError("species not found", 404);
-		}
+				if (!interest) {
+					throw new AppError("species not found", 404);
+				}
 
-		if (interestSpecies.interested) {
-			return;
-		}
+				if (interest.interested) {
+					return;
+				}
 
-		const [createResult, ..._2] = await dbManager.db
-			.insert(speciesInterests)
-			.values({ speciesId, userId: user.id })
-			.returning();
+				const [createResult, ..._2] = await dbManager.db
+					.insert(speciesInterests)
+					.values({ speciesId: taxonId, userId: user.id })
+					.returning();
 
-		if (!createResult) {
-			throw new AppError("unable to make create interest");
+				if (!createResult) {
+					throw new AppError("unable to make create interest");
+				}
+				break;
+			}
+			case "genus": {
+				const [interest, ..._] = await dbManager.db
+					.select({
+						id: genera.id,
+						interested: sql<boolean>`(${genusInterests.id}) IS NOT NULL`,
+					})
+					.from(genera)
+					.where(eq(genera.id, taxonId))
+					.leftJoin(
+						genusInterests,
+						and(
+							eq(genusInterests.genusId, taxonId),
+							eq(genusInterests.userId, user.id),
+						),
+					);
+
+				if (!interest) {
+					throw new AppError("genus not found", 404);
+				}
+
+				if (interest.interested) {
+					return;
+				}
+
+				const [createResult, ..._2] = await dbManager.db
+					.insert(genusInterests)
+					.values({ genusId: taxonId, userId: user.id })
+					.returning();
+
+				if (!createResult) {
+					throw new AppError("unable to create interest");
+				}
+				break;
+			}
+			case "family": {
+				const [interest, ..._] = await dbManager.db
+					.select({
+						id: families.id,
+						interested: sql<boolean>`(${familyInterests.id}) IS NOT NULL`,
+					})
+					.from(families)
+					.where(eq(families.id, taxonId))
+					.leftJoin(
+						familyInterests,
+						and(
+							eq(familyInterests.familyId, taxonId),
+							eq(familyInterests.userId, user.id),
+						),
+					);
+
+				if (!interest) {
+					throw new AppError("genus not found", 404);
+				}
+
+				if (interest.interested) {
+					return;
+				}
+
+				const [createResult, ..._2] = await dbManager.db
+					.insert(familyInterests)
+					.values({ familyId: taxonId, userId: user.id })
+					.returning();
+
+				if (!createResult) {
+					throw new AppError("unable to create interest");
+				}
+				break;
+			}
+			default: {
+				throw new AppError("unknown taxon type");
+			}
 		}
 	}
 
-	public async removeInterest(speciesId: number, user: TUser): Promise<void> {
-		const [interestSpecies, ..._] = await dbManager.db
-			.select({
-				id: species.id,
-				interested: sql<boolean>`(${speciesInterests.id}) IS NOT NULL`,
-				interestId: speciesInterests.id,
-			})
-			.from(species)
-			.where(eq(species.id, speciesId))
-			.leftJoin(
-				speciesInterests,
-				and(
-					eq(speciesInterests.speciesId, speciesId),
-					eq(speciesInterests.userId, user.id),
-				),
-			);
+	public async removeInterest(
+		taxonType: "family" | "genus" | "species",
+		taxonId: number,
+		user: TUser,
+	): Promise<void> {
+		switch (taxonType) {
+			case "species": {
+				const [interestSpecies, ..._] = await dbManager.db
+					.select({
+						id: species.id,
+						interested: sql<boolean>`(${speciesInterests.id}) IS NOT NULL`,
+						interestId: speciesInterests.id,
+					})
+					.from(species)
+					.where(eq(species.id, taxonId))
+					.leftJoin(
+						speciesInterests,
+						and(
+							eq(speciesInterests.speciesId, taxonId),
+							eq(speciesInterests.userId, user.id),
+						),
+					);
 
-		if (!interestSpecies) {
-			throw new AppError("species not found", 404);
-		}
+				if (!interestSpecies) {
+					throw new AppError("species not found", 404);
+				}
 
-		if (!interestSpecies.interested || !interestSpecies.interestId) {
-			return;
-		}
+				if (!interestSpecies.interested || !interestSpecies.interestId) {
+					return;
+				}
 
-		const [createResult, ..._2] = await dbManager.db
-			.delete(speciesInterests)
-			.where(eq(speciesInterests.id, interestSpecies.interestId))
-			.returning();
+				const [createResult, ..._2] = await dbManager.db
+					.delete(speciesInterests)
+					.where(eq(speciesInterests.id, interestSpecies.interestId))
+					.returning();
 
-		if (!createResult) {
-			throw new AppError("unable to make delete interest");
+				if (!createResult) {
+					throw new AppError("unable to make delete interest");
+				}
+				break;
+			}
+			case "genus": {
+				const [interestGenus, ..._] = await dbManager.db
+					.select({
+						id: genera.id,
+						interested: sql<boolean>`(${genusInterests.id}) IS NOT NULL`,
+						interestId: genusInterests.id,
+					})
+					.from(genera)
+					.where(eq(genera.id, taxonId))
+					.leftJoin(
+						genusInterests,
+						and(
+							eq(genusInterests.genusId, taxonId),
+							eq(genusInterests.userId, user.id),
+						),
+					);
+
+				if (!interestGenus) {
+					throw new AppError("genus not found", 404);
+				}
+
+				if (!interestGenus.interested || !interestGenus.interestId) {
+					return;
+				}
+
+				const [createResult, ..._2] = await dbManager.db
+					.delete(genusInterests)
+					.where(eq(genusInterests.id, interestGenus.interestId))
+					.returning();
+
+				if (!createResult) {
+					throw new AppError("unable to delete interest");
+				}
+				break;
+			}
+			case "family": {
+				const [interestFamily, ..._] = await dbManager.db
+					.select({
+						id: families.id,
+						interested: sql<boolean>`(${familyInterests.id}) IS NOT NULL`,
+						interestId: familyInterests.id,
+					})
+					.from(families)
+					.where(eq(families.id, taxonId))
+					.leftJoin(
+						familyInterests,
+						and(
+							eq(familyInterests.familyId, taxonId),
+							eq(familyInterests.userId, user.id),
+						),
+					);
+
+				if (!interestFamily) {
+					throw new AppError("genus not found", 404);
+				}
+
+				if (!interestFamily.interested || !interestFamily.interestId) {
+					return;
+				}
+
+				const [createResult, ..._2] = await dbManager.db
+					.delete(familyInterests)
+					.where(eq(familyInterests.id, interestFamily.interestId))
+					.returning();
+
+				if (!createResult) {
+					throw new AppError("unable to delete interest");
+				}
+				break;
+			}
+			default: {
+				throw new AppError("unknown taxon type");
+			}
 		}
 	}
 
