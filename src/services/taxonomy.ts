@@ -505,7 +505,6 @@ class TaxonomyService {
 		return perfectMatchTrades;
 	}
 
-	// public async getPossibleTradesForUserToGetSpecies(speciesId: number, user: TUser): Promise<PossibleTrades> {
 	public async getPossibleTradesForUserToGetSpecies(
 		speciesId: number,
 		user: TUser,
