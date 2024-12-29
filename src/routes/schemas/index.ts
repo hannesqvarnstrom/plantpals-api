@@ -275,3 +275,7 @@ export const getNamePreviewSchema = z.object({
 	closestTaxonomicParentType: z.enum(["family", "genus", "species"]).optional(),
 	name: z.string().optional(), // om submissionType == hybrid så är det optional
 });
+
+export const getMatchCheckSchema = z.object({
+	objectUserId: z.string(),
+});

@@ -5,7 +5,7 @@ import { requireJwt } from "../middleware/jwt";
 import tradingService from "../services/trading";
 import userService from "../services/user";
 import { AppError } from "../utils/errors";
-import { postTradeSchema } from "./schemas";
+import { getMatchCheckSchema, postTradeSchema } from "./schemas";
 
 const tradingRouter = Router();
 
@@ -69,5 +69,27 @@ tradingRouter.get("/match", async (req, res, next) => {
 		return next(e);
 	}
 });
+
+tradingRouter.get(
+	"/match/check",
+	validateRequest<typeof getMatchCheckSchema>({ query: getMatchCheckSchema }),
+	async (req, res, next) => {
+		const { objectUserId } = req.query;
+		if (!objectUserId || !req.user) {
+			throw new AppError("missing users");
+		}
+		try {
+			const plantsForTradeMatch = await tradingService.getPlantsForTradeMatch(
+				req.user,
+				Number(objectUserId),
+			);
+			setTimeout(() => {
+				return res.send(plantsForTradeMatch);
+			}, 1000);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
 
 export default tradingRouter;

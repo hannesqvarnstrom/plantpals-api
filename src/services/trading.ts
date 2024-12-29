@@ -26,8 +26,13 @@ import TradeModel, { TTrade, type TTradeCreateArgs } from "../models/trade";
 import type { TTradeStatusType } from "../models/trade-status-type";
 import UserModel, { type TUser } from "../models/user";
 import { AppError } from "../utils/errors";
-import plantService from "./plant";
-import userService from "./user";
+import plantService, { type CollectedPlant } from "./plant";
+import taxonomyService from "./taxonomy";
+import userService, {
+	type FamilyInterest,
+	type GenusInterest,
+	type SpeciesInterest,
+} from "./user";
 
 const TRADE_STATUS_VALUES = {
 	pending: "pending",
@@ -285,6 +290,38 @@ class TradingService {
 			.orderBy(desc(sql`"speciesMatches"`), desc(sql`"otherMatches"`));
 
 		return usersQuery.execute();
+	}
+
+	public async getPlantsForTradeMatch(
+		subject: TUser,
+		objectId: number,
+	): Promise<{
+		objectTradeableCollection: CollectedPlant[];
+		objectInterests: {
+			species: SpeciesInterest[];
+			genus: GenusInterest[];
+			family: FamilyInterest[];
+		};
+	}> {
+		const object = await userService.getById(objectId);
+		if (!object) {
+			throw new AppError("cant find object user");
+		}
+
+		const objectInterests = await userService.getInterests(objectId);
+		const objectCollection = await plantService.getUserCollection(object);
+
+		// const subjectInterests = await userService.getInterests(subject.id);
+		// const objectInterests = await userService.getInterests(object.id);
+
+		const objectTradeableCollection = objectCollection.filter(
+			(plant) => plant.openForTrade,
+		);
+
+		return {
+			objectTradeableCollection,
+			objectInterests,
+		};
 	}
 }
 
