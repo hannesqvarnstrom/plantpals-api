@@ -24,6 +24,8 @@ import {
 } from "../db/schema";
 import TradeModel, { TTrade, type TTradeCreateArgs } from "../models/trade";
 import type { TTradeStatusType } from "../models/trade-status-type";
+import TradeSuggestionModel from "../models/trade-suggestion";
+import TradeSuggestionPlantModel from "../models/trade-suggestion-plant";
 import UserModel, { type TUser } from "../models/user";
 import { AppError } from "../utils/errors";
 import plantService, { type CollectedPlant } from "./plant";
@@ -45,74 +47,17 @@ const TRADE_STATUS_VALUES = {
 class TradingService {
 	tradeModel: TradeModel;
 	userModel: UserModel;
+	tradeSuggestionModel: TradeSuggestionModel;
+	tradeSuggestionPlantModel: TradeSuggestionPlantModel;
 
 	constructor() {
 		this.tradeModel = new TradeModel();
+		this.tradeSuggestionModel = new TradeSuggestionModel();
+		this.tradeSuggestionPlantModel = new TradeSuggestionPlantModel();
 		this.userModel = new UserModel();
 	}
 
-	public async createTrade(
-		args: Omit<TTradeCreateArgs, "statusId" | "receivingUserId">,
-	): Promise<Trade> {
-		const [status, ..._] = await dbManager.db
-			.select()
-			.from(tradeStatusTypes)
-			.where(eq(tradeStatusTypes.value, TRADE_STATUS_VALUES.pending));
-		if (!status) {
-			throw new AppError("missing pending status", 500);
-		}
-
-		const allUserPlants = await plantService.getByUser(args.requestingUserId);
-		const desiredPlant = await plantService.getById(args.plantDesiredId);
-		const desiredPlantUpForTrade = await plantService.checkTradability(
-			args.plantDesiredId,
-		);
-
-		const tradeExists = await dbManager.db
-			.select()
-			.from(trades)
-			.where(
-				and(
-					eq(trades.requestingUserId, args.requestingUserId),
-					eq(trades.receivingUserId, desiredPlant.userId),
-					eq(trades.plantDesiredId, desiredPlant.id),
-					eq(trades.plantOfferedId, args.plantOfferedId),
-				),
-			)
-			.rightJoin(
-				tradeStatusTypes,
-				and(
-					eq(tradeStatusTypes.id, trades.statusId),
-					not(inArray(tradeStatusTypes.value, ["declined", "completed"])),
-				),
-			);
-		const valid =
-			!!allUserPlants.find((plant) => plant.id === args.plantOfferedId) &&
-			desiredPlantUpForTrade &&
-			tradeExists;
-		if (!valid) {
-			throw new AppError(
-				"trade is already active, cannot create new trade",
-				400,
-			);
-		}
-
-		const trade = await this.tradeModel.create({
-			...args,
-			statusId: status.id,
-			receivingUserId: desiredPlant.userId,
-		});
-
-		await dbManager.db
-			.insert(tradeStatusChanges)
-			.values({ tradeId: trade.id, statusId: status.id });
-
-		return { ...trade, status, history: [status] };
-	}
-
 	public async checkStatus(tradeId: number): Promise<TTradeStatusType> {
-		// const trade = await this.tradeModel.getById(tradeId)
-		console.log(dbManager.db.query);
 		const trade = await dbManager.db.query.trades.findFirst({
 			where: eq(trades.id, tradeId),
 			with: {
@@ -125,9 +70,6 @@ class TradingService {
 
 		return trade.statusType;
 	}
-	// @todo
-
-	// add column or something which is 'declined_at', if it has been declined recently, dont allow trading..?
 
 	public async getTrades(userId: number): Promise<Trades | undefined> {
 		const userTrades = await dbManager.db.query.users
@@ -323,6 +265,81 @@ class TradingService {
 			objectInterests,
 		};
 	}
+
+	public async createTradeAndMakeSuggestion({
+		subjectPlantIds,
+		objectPlantIds,
+		subjectUserId,
+		objectUserId,
+	}: {
+		subjectPlantIds: number[];
+		objectPlantIds: number[];
+		subjectUserId: number;
+		objectUserId: number;
+	}): Promise<{ status: "pending" }> {
+		const subjectUser = await userService.getById(subjectUserId);
+		const objectUser = await userService.getById(objectUserId);
+		if (!subjectUser || !objectUser) {
+			throw new AppError("missing users");
+		}
+
+		await Promise.all(
+			subjectPlantIds.map(async (id) => {
+				const plant = await plantService.getById(id);
+				if (plant.userId !== subjectUserId) {
+					throw new AppError("subject user does not own plant", 400);
+				}
+			}),
+		);
+
+		await Promise.all(
+			objectPlantIds.map(async (id) => {
+				const plant = await plantService.getById(id);
+				if (plant.userId !== objectUserId) {
+					throw new AppError("object user does not own plant", 400);
+				}
+			}),
+		);
+
+		const [status, ..._] = await dbManager.db
+			.select()
+			.from(tradeStatusTypes)
+			.where(eq(tradeStatusTypes.value, TRADE_STATUS_VALUES.pending));
+		if (!status) {
+			throw new AppError("missing pending status", 500);
+		}
+		const trade = await this.tradeModel.create({
+			requestingUserId: subjectUserId,
+			receivingUserId: objectUserId,
+			statusId: status.id,
+		});
+
+		const tradeSuggestion = await this.tradeSuggestionModel.create({
+			subjectUserId,
+			objectUserId,
+			tradeId: trade.id,
+		});
+
+		const subjectPlantSuggestions = await Promise.all(
+			subjectPlantIds.map(async (plantId) => {
+				return await this.tradeSuggestionPlantModel.create({
+					plantId,
+					tradeSuggestionId: tradeSuggestion.id,
+				});
+			}),
+		);
+
+		const objectPlantSuggestions = await Promise.all(
+			objectPlantIds.map(async (plantId) => {
+				return await this.tradeSuggestionPlantModel.create({
+					plantId,
+					tradeSuggestionId: tradeSuggestion.id,
+				});
+			}),
+		);
+
+		return { status: "pending" };
+	}
 }
 
 interface Trades {
@@ -335,8 +352,6 @@ interface Trade {
 	id: number;
 	receivingUserId: number;
 	requestingUserId: number;
-	plantDesiredId: number;
-	plantOfferedId: number;
 	status: TradeStatus;
 	history: TradeStatus[];
 }
