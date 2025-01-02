@@ -4,6 +4,7 @@ import { JWTExpiresIn, requireJwt, signJwt } from "../middleware/jwt";
 import { TUser } from "../models/user";
 import plantService from "../services/plant";
 import userService from "../services/user";
+import { AppError } from "../utils/errors";
 import { updateMeSchema } from "./schemas";
 
 const usersRouter = Router();
@@ -51,6 +52,27 @@ usersRouter.get("/:userId/interests", requireJwt, async (req, res, next) => {
 		return next(e);
 	}
 });
+
+usersRouter.get(
+	"/:userId/tradeable-plants",
+	requireJwt,
+	async (req, res, next) => {
+		try {
+			const { userId } = req.params;
+			const requestingUserId = req.jwtPayload?.userId;
+			if (!requestingUserId) {
+				throw new AppError("missing user");
+			}
+			const tPlants = await userService.getTradeablePlants(
+				Number(userId),
+				requestingUserId,
+			);
+			return res.send(tPlants);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
 
 usersRouter.get("/collection", requireJwt, async (req, res, next) => {
 	try {

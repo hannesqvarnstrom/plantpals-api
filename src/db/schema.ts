@@ -308,6 +308,26 @@ export const tradeSuggestionPlants = pgTable("trade_suggestion_plants", {
 		.notNull(),
 });
 
+export const tradeSuggestionRelations = relations(
+	tradeSuggestions,
+	(helpers) => ({
+		suggestionPlants: helpers.many(tradeSuggestionPlants, {
+			relationName: "suggestionPlants",
+		}),
+	}),
+);
+
+export const tradeSuggestionPlantRelations = relations(
+	tradeSuggestionPlants,
+	(helpers) => ({
+		tradeSuggestions: helpers.one(tradeSuggestions, {
+			fields: [tradeSuggestionPlants.tradeSuggestionId],
+			references: [tradeSuggestions.id],
+			relationName: "suggestionPlants",
+		}),
+	}),
+);
+
 export const Schema = {
 	users,
 	userRelations,
@@ -320,6 +340,10 @@ export const Schema = {
 	genusInterests,
 	familyInterests,
 	tradeablePlants,
+	tradeSuggestions,
+	tradeSuggestionPlants,
+	tradeSuggestionRelations,
+	tradeSuggestionPlantRelations,
 	userSpeciesSubmissions,
 	trades,
 	tradeStatusTypes,

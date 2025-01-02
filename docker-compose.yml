@@ -11,8 +11,10 @@ services:
         
     depends_on:
       - postgres
+      - redis
     environment:
       DATABASE_URL: postgres://postgres@postgres/plant_catalog
+      REDIS_URL: redis://redis:6379
       #PORT: 5000
   
   postgres:
@@ -22,3 +24,13 @@ services:
     environment:
       POSTGRES_DB: plant_catalog
       POSTGRES_HOST_AUTH_METHOD: trust
+
+  redis:
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
