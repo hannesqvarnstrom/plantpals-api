@@ -223,13 +223,18 @@ class TradingService {
 				.innerJoin(species, eq(species.id, plants.speciesId))
 				.limit(1),
 		);
-		const [declinedStatus, ..._] = await dbManager.db
-			.select()
+		const excludeStatuses = await dbManager.db
+			.select({ id: tradeStatusTypes.id })
 			.from(tradeStatusTypes)
-			.where(eq(tradeStatusTypes.value, "declined"));
-		if (!declinedStatus) {
-			throw new AppError("cant find declined status");
-		}
+			.where(
+				inArray(tradeStatusTypes.value, [
+					"accepted",
+					"cancelled",
+					"completed",
+					"declined",
+				]),
+			);
+
 		const usersQuery = dbManager.db
 			.select({
 				userId: users.id,
@@ -239,7 +244,7 @@ class TradingService {
 					species.id,
 					userInterests.species.map((s) => s.speciesId),
 				)}
-				THEN ${plants.id}
+				THEN ${species.id}
 				END)`.as("speciesMatches"),
 				otherMatches: sql<number>`COUNT(DISTINCT CASE
 				WHEN ${or(
@@ -252,7 +257,7 @@ class TradingService {
 						userInterests.family.map((s) => s.familyId),
 					),
 				)}
-				THEN ${plants.id}
+				THEN ${species.id}
 				END)`.as("otherMatches"),
 				tradeInProgress: countDistinct(trades.id),
 			})
@@ -268,7 +273,7 @@ class TradingService {
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
 			.leftJoin(plants, eq(plants.userId, users.id))
-			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
 			.leftJoin(species, eq(species.id, plants.speciesId))
 			.leftJoin(
 				trades,
@@ -289,7 +294,10 @@ class TradingService {
 								.where(
 									and(
 										eq(tradeStatusChanges.tradeId, trades.id),
-										eq(tradeStatusChanges.statusId, declinedStatus.id),
+										inArray(
+											tradeStatusChanges.statusId,
+											excludeStatuses.map((x) => x.id),
+										),
 									),
 								)
 								.limit(1),
@@ -572,13 +580,17 @@ class TradingService {
 				.innerJoin(species, eq(species.id, plants.speciesId))
 				.limit(1),
 		);
-		const [declinedStatus, ..._] = await dbManager.db
-			.select()
+		const excludeStatuses = await dbManager.db
+			.select({ id: tradeStatusTypes.id })
 			.from(tradeStatusTypes)
-			.where(eq(tradeStatusTypes.value, "declined"));
-		if (!declinedStatus) {
-			throw new AppError("cant find declined status");
-		}
+			.where(
+				inArray(tradeStatusTypes.value, [
+					"accepted",
+					"cancelled",
+					"completed",
+					"declined",
+				]),
+			);
 
 		const usersQuery = dbManager.db
 			.select({
@@ -639,7 +651,10 @@ class TradingService {
 								.where(
 									and(
 										eq(tradeStatusChanges.tradeId, trades.id),
-										eq(tradeStatusChanges.statusId, declinedStatus.id),
+										inArray(
+											tradeStatusChanges.statusId,
+											excludeStatuses.map((x) => x.id),
+										),
 									),
 								)
 								.limit(1),
