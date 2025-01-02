@@ -232,13 +232,6 @@ export const trades = pgTable("trades", {
 	receivingUserId: integer("receiving_user_id")
 		.references(() => users.id)
 		.notNull(),
-	plantOfferedId: integer("plant_offered_id")
-		.references(() => plants.id)
-		.notNull(),
-	plantDesiredId: integer("plant_desired_id")
-		.references(() => plants.id)
-		.notNull(),
-
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	statusId: integer("status_id")
 		.references(() => tradeStatusTypes.id)
@@ -288,6 +281,53 @@ export const tradeRelations = relations(trades, (helpers) => ({
 	}),
 }));
 
+export const tradeSuggestions = pgTable("trade_suggestions", {
+	id: serial("id").primaryKey(),
+	tradeId: integer("trade_id")
+		.references(() => trades.id)
+		.notNull(),
+	subjectUserId: integer("subject_user_id")
+		.references(() => users.id)
+		.notNull(),
+	objectUserId: integer("object_user_id")
+		.references(() => users.id)
+		.notNull(),
+	acceptedAt: timestamp("accepted_at"),
+	deniedAt: timestamp("denied_at"),
+	respondedAt: timestamp("responded_at"),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tradeSuggestionPlants = pgTable("trade_suggestion_plants", {
+	id: serial("id").primaryKey(),
+	tradeSuggestionId: integer("trade_suggestion_id")
+		.references(() => tradeSuggestions.id)
+		.notNull(),
+	plantId: integer("plant_id")
+		.references(() => plants.id)
+		.notNull(),
+});
+
+export const tradeSuggestionRelations = relations(
+	tradeSuggestions,
+	(helpers) => ({
+		suggestionPlants: helpers.many(tradeSuggestionPlants, {
+			relationName: "suggestionPlants",
+		}),
+	}),
+);
+
+export const tradeSuggestionPlantRelations = relations(
+	tradeSuggestionPlants,
+	(helpers) => ({
+		tradeSuggestions: helpers.one(tradeSuggestions, {
+			fields: [tradeSuggestionPlants.tradeSuggestionId],
+			references: [tradeSuggestions.id],
+			relationName: "suggestionPlants",
+		}),
+	}),
+);
+
 export const Schema = {
 	users,
 	userRelations,
@@ -300,6 +340,10 @@ export const Schema = {
 	genusInterests,
 	familyInterests,
 	tradeablePlants,
+	tradeSuggestions,
+	tradeSuggestionPlants,
+	tradeSuggestionRelations,
+	tradeSuggestionPlantRelations,
 	userSpeciesSubmissions,
 	trades,
 	tradeStatusTypes,

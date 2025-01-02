@@ -1,36 +1,36 @@
-import { Router } from "express"
+import { Router } from "express";
 
-import usersRouter from "./users"
-import envVars from "../utils/environment"
-import authRouter from "./auth"
-import taxonomyRouter from "./taxonomy"
-import plantsRouter from "./plants"
-import tradingRouter from "./trading"
-import interestsRouter from "./interests"
+import envVars from "../utils/environment";
+import authRouter from "./auth";
+import interestsRouter from "./interests";
+import plantsRouter from "./plants";
+import taxonomyRouter from "./taxonomy";
+import tradingRouter from "./trading";
+import usersRouter from "./users";
 
-const router = Router()
+const router = Router();
 
 router.use((_req, res, next) => {
-    res.set('content-type', 'application/json')
-    if (envVars.isDev()) {
-        console.log('Getting request at url', _req.url)
-    }
+	res.set("content-type", "application/json");
+	if (envVars.isDev()) {
+		console.log("Getting request at url", _req.url);
+	}
 
-    next()
-})
+	next();
+});
 
-router.get('/', (_req, res) => {
-    res.send({ message: 'Welcome to MoodLogger!' })
-})
+router.get("/", (_req, res) => {
+	res.send({ message: "Welcome to MoodLogger!" });
+});
 
 /**
- * Users 
+ * Users
  * - GET /me
  * - PUT /me
  * - GET /:userId/interests
  * - GET /:userId/collection
  */
-router.use('/users', usersRouter)
+router.use("/users", usersRouter);
 
 /**
  * Plants
@@ -39,15 +39,15 @@ router.use('/users', usersRouter)
  * - POST /:plantId/tradeable
  * - DELETE /:plantId/tradeable
  */
-router.use('/plants', plantsRouter)
+router.use("/plants", plantsRouter);
 
 /**
- * - POST /register, 
- * - POST /login, 
+ * - POST /register,
+ * - POST /login,
  * - GET /google
  * - GET /google/redirect
  */
-router.use('/auth', authRouter)
+router.use("/auth", authRouter);
 
 /**
  * Taxonomy (@todo refactor)
@@ -57,19 +57,18 @@ router.use('/auth', authRouter)
  * - POST /species/:speciesId/interests
  * - DELETE /species/:speciesId/interests
  */
-router.use('/taxonomy', taxonomyRouter)
+router.use("/taxonomy", taxonomyRouter);
 
 /**
  * Trading
  * - POST /
  */
-router.use('/trading', tradingRouter)
+router.use("/trading", tradingRouter);
 
 /**
  * Interests
  * - GET /
  */
-router.use('/interests', interestsRouter)
+router.use("/interests", interestsRouter);
 
-export default router
-
+export default router;

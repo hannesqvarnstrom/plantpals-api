@@ -244,8 +244,15 @@ export const putTraderSchema = z.object({
 });
 
 export const postTradeSchema = z.object({
-	plantOfferedId: z.number(),
-	plantDesiredId: z.number(),
+	objectUserId: z.number(),
+	subjectPlantIds: z.array(z.number()),
+	objectPlantIds: z.array(z.number()),
+});
+
+export const postMakeTradeSuggestionSchema = z.object({
+	suggestionId: z.number(),
+	subjectPlantIds: z.array(z.number()),
+	objectPlantIds: z.array(z.number()),
 });
 
 export const postSpeciesSubmissionSchema = z.object({

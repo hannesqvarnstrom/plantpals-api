@@ -5,8 +5,10 @@ import {
 	familyInterests,
 	genera,
 	genusInterests,
+	plants,
 	species,
 	speciesInterests,
+	tradeablePlants,
 } from "../db/schema";
 import { TFamily } from "../models/family";
 import type { TFamilyInterest } from "../models/family-interest";
@@ -20,7 +22,7 @@ import UserModel, {
 import type { SchemaInterface, updateMeSchema } from "../routes/schemas";
 import { AppError } from "../utils/errors";
 import { AuthenticationService } from "./authentication";
-import { PlantTypeCol } from "./plant";
+import plantService, { type CollectedPlant } from "./plant";
 import taxonomyService from "./taxonomy";
 
 class UserService {
@@ -93,6 +95,29 @@ class UserService {
 		const result = await this.model.updateById(id, payload);
 
 		return result;
+	}
+
+	public async getTradeablePlants(
+		userId: number,
+		requestingUserId: number,
+	): Promise<CollectedPlant[]> {
+		const p = await dbManager.db
+			.select({
+				id: plants.id,
+				userId: plants.userId,
+				createdAt: plants.createdAt,
+				speciesId: plants.speciesId,
+				type: plants.type,
+			})
+			.from(plants)
+			.where(eq(plants.userId, userId))
+			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id));
+		const rValue = await Promise.all(
+			p.map((innerP) =>
+				plantService.getCollectedPlant(innerP, requestingUserId),
+			),
+		);
+		return rValue;
 	}
 
 	public async getInterests(userId: number): Promise<{

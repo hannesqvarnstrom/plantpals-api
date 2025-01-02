@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { validateRequest } from "zod-express-middleware";
 import dbManager from "../db";
-import { allowJwtButNotRequire, requireJwt } from "../middleware/jwt";
+import {
+	allowJwtButNotRequire,
+	requireJwt,
+	requireUser,
+} from "../middleware/jwt";
 import taxonomyService from "../services/taxonomy";
 import userService from "../services/user";
 import { AppError } from "../utils/errors";
@@ -39,7 +43,7 @@ taxonomyRouter.get(
 				onlyAccepted,
 				excludeRank,
 			});
-			console.log("results:", results);
+
 			return res.send(results);
 		} catch (e) {
 			return next(e);
@@ -59,8 +63,6 @@ taxonomyRouter.get(
 				req.jwtPayload?.userId,
 			);
 			return res.send(results);
-
-			// }, 1000)
 		} catch (e) {
 			return next(e);
 		}
@@ -141,10 +143,8 @@ taxonomyRouter.get(
 				{ q, page, familyId, onlyAccepted },
 				req.jwtPayload?.userId,
 			);
-			// console.log('results:', results)
-			setTimeout(() => {
-				return res.send(results);
-			}, 1000);
+
+			return res.send(results);
 		} catch (e) {
 			return next(e);
 		}
@@ -165,8 +165,6 @@ taxonomyRouter.get(
 			);
 
 			return res.send(results);
-
-			// }, 1000)
 		} catch (e) {
 			return next(e);
 		}
@@ -220,22 +218,20 @@ taxonomyRouter.get(
 	"/species/:speciesId/trades/possible",
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("no user");
-			}
+			const user = requireUser(req);
 			const { receive } = req.query;
 
 			if (receive) {
 				const possibleTrades =
 					await taxonomyService.getPossibleTradesForUserToGetSpecies(
 						Number(req.params.speciesId),
-						req.user,
+						user,
 					);
 				return res.status(200).send(possibleTrades);
 			}
 			const possibleTrades = await taxonomyService.getPossibleTradesForUser(
 				Number(req.params.speciesId),
-				req.user,
+				user,
 			);
 			return res.status(200).send(possibleTrades);
 		} catch (e) {
@@ -246,13 +242,11 @@ taxonomyRouter.get(
 
 taxonomyRouter.post("/species/:speciesId/interests", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("no user");
-		}
+		const user = requireUser(req);
 		await taxonomyService.setNewInterest(
 			"species",
 			Number(req.params.speciesId),
-			req.user,
+			user,
 		);
 		return res.status(201).send();
 	} catch (e) {
@@ -263,13 +257,11 @@ taxonomyRouter.delete(
 	"/species/:speciesId/interests",
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("no user");
-			}
+			const user = requireUser(req);
 			await taxonomyService.removeInterest(
 				"species",
 				Number(req.params.speciesId),
-				req.user,
+				user,
 			);
 			return res.status(201).send();
 		} catch (e) {
@@ -280,13 +272,11 @@ taxonomyRouter.delete(
 
 taxonomyRouter.post("/genus/:genusId/interests", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("no user");
-		}
+		const user = requireUser(req);
 		await taxonomyService.setNewInterest(
 			"genus",
 			Number(req.params.genusId),
-			req.user,
+			user,
 		);
 		return res.status(201).send();
 	} catch (e) {
@@ -295,13 +285,11 @@ taxonomyRouter.post("/genus/:genusId/interests", async (req, res, next) => {
 });
 taxonomyRouter.delete("/genus/:genusId/interests", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("no user");
-		}
+		const user = requireUser(req);
 		await taxonomyService.removeInterest(
 			"genus",
 			Number(req.params.genusId),
-			req.user,
+			user,
 		);
 		return res.status(201).send();
 	} catch (e) {
@@ -311,13 +299,11 @@ taxonomyRouter.delete("/genus/:genusId/interests", async (req, res, next) => {
 
 taxonomyRouter.post("/family/:familyId/interests", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("no user");
-		}
+		const user = requireUser(req);
 		await taxonomyService.setNewInterest(
 			"family",
 			Number(req.params.familyId),
-			req.user,
+			user,
 		);
 		return res.status(201).send();
 	} catch (e) {
@@ -326,13 +312,11 @@ taxonomyRouter.post("/family/:familyId/interests", async (req, res, next) => {
 });
 taxonomyRouter.delete("/family/:familyId/interests", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("no user");
-		}
+		const user = requireUser(req);
 		await taxonomyService.removeInterest(
 			"family",
 			Number(req.params.familyId),
-			req.user,
+			user,
 		);
 		return res.status(201).send();
 	} catch (e) {
@@ -345,12 +329,10 @@ taxonomyRouter.post(
 	validateRequest({ body: postSpeciesSubmissionSchema }),
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("no user");
-			}
+			const user = requireUser(req);
 			const speciesSubmission = await taxonomyService.createSpeciesSubmission(
 				req.body,
-				req.user,
+				user,
 			);
 			return res.send(speciesSubmission);
 		} catch (e) {
