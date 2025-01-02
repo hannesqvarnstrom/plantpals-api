@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { validateRequest } from "zod-express-middleware";
-import { type JwtPayload, requireJwt, verifyJwt } from "../middleware/jwt";
+import {
+	type JwtPayload,
+	requireJwt,
+	requireUser,
+	verifyJwt,
+} from "../middleware/jwt";
 
 import { NotificationsService } from "../services/notifications";
 import tradingService from "../services/trading";
@@ -68,13 +73,11 @@ tradingRouter.post(
 	validateRequest({ body: postTradeSchema }),
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("");
-			}
+			const user = requireUser(req);
 			const { objectUserId, subjectPlantIds, objectPlantIds } = req.body;
 
 			const result = await tradingService.createTradeAndMakeSuggestion({
-				subjectUserId: req.user.id,
+				subjectUserId: user.id,
 				objectUserId,
 				subjectPlantIds,
 				objectPlantIds,
@@ -92,14 +95,12 @@ tradingRouter.post(
 	validateRequest({ body: postMakeTradeSuggestionSchema }),
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("no user");
-			}
+			const user = requireUser(req);
 			const { suggestionId, subjectPlantIds, objectPlantIds } = req.body;
 			const result = await tradingService.makeSuggestionForPendingTrade(
 				Number(req.params.tradeId),
 				suggestionId,
-				req.user?.id,
+				user.id,
 				subjectPlantIds,
 				objectPlantIds,
 			);
@@ -113,10 +114,8 @@ tradingRouter.post(
 
 tradingRouter.get("/", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("");
-		}
-		const trades = await tradingService.getTrades(req.user.id);
+		const user = requireUser(req);
+		const trades = await tradingService.getTrades(user.id);
 		return res.send(trades);
 	} catch (e) {
 		return next(e);
@@ -127,13 +126,11 @@ tradingRouter.post(
 	"/:tradeId/suggestions/:suggestionId/accept",
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("user missing");
-			}
+			const user = requireUser(req);
 			const result = await tradingService.acceptTradeSuggestion(
 				Number(req.params.tradeId),
 				Number(req.params.suggestionId),
-				req.user,
+				user,
 			);
 			return res.send(result);
 		} catch (e) {
@@ -145,13 +142,11 @@ tradingRouter.post(
 	"/:tradeId/suggestions/:suggestionId/decline",
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("user missing");
-			}
+			const user = requireUser(req);
 			const result = await tradingService.declineTradeSuggestion(
 				Number(req.params.tradeId),
 				Number(req.params.suggestionId),
-				req.user,
+				user,
 			);
 			return res.send(result);
 		} catch (e) {
@@ -162,13 +157,10 @@ tradingRouter.post(
 
 tradingRouter.get("/species/:speciesId", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("user required");
-		}
-
+		const user = requireUser(req);
 		const tradeMatches = await tradingService.getTradeMatchesForSpecies(
 			Number(req.params.speciesId),
-			req.user,
+			user,
 		);
 		return res.send(tradeMatches);
 	} catch (e) {
@@ -180,12 +172,10 @@ tradingRouter.get(
 	"/:tradeId/suggestions/:suggestionId",
 	async (req, res, next) => {
 		try {
-			if (!req.user) {
-				throw new AppError("");
-			}
+			const user = requireUser(req);
 			const suggestionData = await tradingService.getSuggestion(
 				Number(req.params.suggestionId),
-				req.user,
+				user,
 			);
 			return res.send(suggestionData);
 		} catch (e) {
@@ -194,32 +184,10 @@ tradingRouter.get(
 	},
 );
 
-// tradingRouter.get(
-// 	"/:tradeId/suggestions/:suggestionId/data",
-// 	async (req, res, next) => {
-// 		try {
-// 			if (!req.user) {
-// 				throw new AppError("");
-// 			}
-// 			const suggestionData = await tradingService.getFullSuggestionData(
-// 				Number(req.params.suggestionId),
-// 				req.user,
-// 			);
-// 			return res.send(suggestionData);
-// 		} catch (e) {
-// 			return next(e);
-// 		}
-// 	},
-// );
-
 tradingRouter.get("/match", async (req, res, next) => {
 	try {
-		if (!req.user) {
-			throw new AppError("");
-		}
-		const tradeMatches = await tradingService.getAllPossibleTradesForUser(
-			req.user,
-		);
+		const user = requireUser(req);
+		const tradeMatches = await tradingService.getAllPossibleTradesForUser(user);
 		return res.send(tradeMatches);
 	} catch (e) {
 		return next(e);
@@ -231,6 +199,7 @@ tradingRouter.get(
 	validateRequest<typeof getMatchCheckSchema>({ query: getMatchCheckSchema }),
 	async (req, res, next) => {
 		const { objectUserId } = req.query;
+
 		if (!objectUserId || !req.user) {
 			throw new AppError("missing users");
 		}

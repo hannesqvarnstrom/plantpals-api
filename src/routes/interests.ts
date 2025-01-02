@@ -1,24 +1,25 @@
 import { Router } from "express";
-import { requireJwt } from "../middleware/jwt";
+import { requireJwt, requireUser } from "../middleware/jwt";
 import userService from "../services/user";
+import { AppError } from "../utils/errors";
 
-const interestsRouter = Router()
+const interestsRouter = Router();
 interestsRouter.use(requireJwt, async (req, res, next) => {
-    const userId = req.jwtPayload?.userId
-    if (!userId) {
-        return next(401) // jwt malformed
-    }
+	const userId = req.jwtPayload?.userId;
+	if (!userId) {
+		return next(401); // jwt malformed
+	}
 
-    const user = await userService.getById(userId)
-    req.user = user
+	const user = await userService.getById(userId);
+	req.user = user;
 
-    next()
-})
+	next();
+});
 
-interestsRouter.get('/', async (req, res, next) => {
-    const userInterests = await userService.getInterests(req.user!.id)
-    return res.send(userInterests)
-})
+interestsRouter.get("/", async (req, res, next) => {
+	const user = requireUser(req);
+	const userInterests = await userService.getInterests(user.id);
+	return res.send(userInterests);
+});
 
-
-export default interestsRouter
+export default interestsRouter;

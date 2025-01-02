@@ -14,13 +14,6 @@ usersRouter.get("/me", requireJwt, async (req, res, next) => {
 		const userId = req.jwtPayload?.userId as number;
 		const userInfo = await userService.getById(userId);
 		const plantCollection = await plantService.getUserCollection(userId);
-		// const interests = await userService.getInterests(userId)
-		// const mappedInterests = {
-		//     species: interests.userSpeciesInterests,
-		//     genera: interests.userGenusInterests,
-		//     families: interests.userFamilyInterests
-		// }
-
 		return res.send({ userInfo, plantCollection });
 	} catch (e) {
 		return next(e);
@@ -76,7 +69,10 @@ usersRouter.get(
 
 usersRouter.get("/collection", requireJwt, async (req, res, next) => {
 	try {
-		const user = await userService.getById(req.jwtPayload!.userId);
+		if (!req.jwtPayload?.userId) {
+			throw new AppError("Missing user");
+		}
+		const user = await userService.getById(req.jwtPayload.userId);
 		const collection = await plantService.getUserCollection(user);
 		return res.send(collection);
 	} catch (e) {

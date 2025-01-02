@@ -461,17 +461,12 @@ class TradingService {
 				});
 			}),
 		);
-		await this.notifyUsers([subjectUserId, objectUserId]);
-
-		// await this.notificationsService.publishToUser({
-		// 	type: "TRADES_UPDATE",
-		// 	payload: await this.getTrades(subjectUserId),
-		// });
+		await this.updateUsersTradeNotifications([subjectUserId, objectUserId]);
 
 		return newTradeSuggestion;
 	}
 
-	private async notifyUsers(userIds: number[]) {
+	private async updateUsersTradeNotifications(userIds: number[]) {
 		return Promise.all(
 			userIds.map(
 				async (id) =>
@@ -584,6 +579,7 @@ class TradingService {
 		if (!declinedStatus) {
 			throw new AppError("cant find declined status");
 		}
+
 		const usersQuery = dbManager.db
 			.select({
 				userId: users.id,
@@ -655,26 +651,8 @@ class TradingService {
 			.orderBy(desc(sql`"speciesMatches"`), desc(sql`"otherMatches"`));
 
 		return usersQuery.execute();
-		/**
-		 * the same as the match algorhithm, but include all those who have the species REGARDLESS if matching.
-		 * separate them into different lists:
-		 * - ones with matches
-		 * - ones without
-		 */
 	}
-	// public async getFullSuggestionData(
-	// 	suggestionId: number,
-	// 	user: TUser,
-	// ): Promise<{
-	// 	suggestionPlants: CollectedPlant[];
-	// 	otherUsersInterests: {
-	// 		species: SpeciesInterest[];
-	// 		genus: GenusInterest[];
-	// 		family: FamilyInterest[];
-	// 	};
-	// }> {
 
-	// }
 	public async acceptTradeSuggestion(
 		tradeId: number,
 		suggestionId: number,
@@ -707,19 +685,11 @@ class TradingService {
 			.update(trades)
 			.set({ statusId: acceptedStatus.id })
 			.where(eq(trades.id, tradeId));
-		await this.notifyUsers([user.id, suggestion.subjectUserId]);
 
-		// await this.notificationsService.publishToUser({
-		// 	type: "TRADES_UPDATE",
-		// 	payload: await this.getTrades(user.id),
-		// });
-		/**
-		 * find trade accepted status
-		 * set trade status as accepted
-		 * set trade suggestion status as accepted
-		 *
-		 *
-		 */
+		await this.updateUsersTradeNotifications([
+			user.id,
+			suggestion.subjectUserId,
+		]);
 	}
 
 	public async declineTradeSuggestion(
@@ -756,12 +726,10 @@ class TradingService {
 			.set({ statusId: declinedStatus.id })
 			.where(eq(trades.id, tradeId));
 
-		await this.notifyUsers([user.id, suggestion.subjectUserId]);
-
-		// await this.notificationsService.publishToUser({
-		// 	type: "TRADES_UPDATE",
-		// 	payload: await this.getTrades(user.id),
-		// });
+		await this.updateUsersTradeNotifications([
+			user.id,
+			suggestion.subjectUserId,
+		]);
 	}
 }
 
