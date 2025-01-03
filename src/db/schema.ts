@@ -7,7 +7,6 @@ import {
 	pgEnum,
 	pgTable,
 	serial,
-	smallint,
 	text,
 	timestamp,
 	varchar,
@@ -264,6 +263,21 @@ export const tradeStatusChanges = pgTable("trade_status_changes", {
 	changedAt: timestamp("changed_at").defaultNow().notNull(),
 });
 
+export const tradeStatusChangeRelations = relations(
+	tradeStatusChanges,
+	(helpers) => ({
+		trade: helpers.one(trades, {
+			fields: [tradeStatusChanges.tradeId],
+			references: [trades.id],
+			relationName: "statusHistory",
+		}),
+		statusType: helpers.one(tradeStatusTypes, {
+			fields: [tradeStatusChanges.statusId],
+			references: [tradeStatusTypes.id],
+		}),
+	}),
+);
+
 export const tradeRelations = relations(trades, (helpers) => ({
 	statusType: helpers.one(tradeStatusTypes, {
 		fields: [trades.statusId],
@@ -279,10 +293,16 @@ export const tradeRelations = relations(trades, (helpers) => ({
 		references: [users.id],
 		relationName: "tradesReceivedByUser",
 	}),
+	suggestions: helpers.many(tradeSuggestions, {
+		relationName: "suggestions",
+	}),
+	statusHistory: helpers.many(tradeStatusChanges, {
+		relationName: "statusHistory",
+	}),
 }));
 
 export const tradeSuggestions = pgTable("trade_suggestions", {
-	id: serial("id").primaryKey(),
+	id: serial("id").primaryKey().notNull(),
 	tradeId: integer("trade_id")
 		.references(() => trades.id)
 		.notNull(),
@@ -299,7 +319,7 @@ export const tradeSuggestions = pgTable("trade_suggestions", {
 });
 
 export const tradeSuggestionPlants = pgTable("trade_suggestion_plants", {
-	id: serial("id").primaryKey(),
+	id: serial("id").primaryKey().notNull(),
 	tradeSuggestionId: integer("trade_suggestion_id")
 		.references(() => tradeSuggestions.id)
 		.notNull(),
@@ -313,6 +333,11 @@ export const tradeSuggestionRelations = relations(
 	(helpers) => ({
 		suggestionPlants: helpers.many(tradeSuggestionPlants, {
 			relationName: "suggestionPlants",
+		}),
+		trade: helpers.one(trades, {
+			fields: [tradeSuggestions.tradeId],
+			references: [trades.id],
+			relationName: "suggestions",
 		}),
 	}),
 );
@@ -351,4 +376,6 @@ export const Schema = {
 	speciesRelations,
 	familyRelations,
 	generaRelations,
+	tradeStatusChangeRelations,
+	tradeStatusChanges,
 };

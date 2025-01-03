@@ -26,7 +26,7 @@ import {
 	trades,
 	users,
 } from "../db/schema";
-import TradeModel, { TTrade, type TTradeCreateArgs } from "../models/trade";
+import TradeModel, { type TTrade } from "../models/trade";
 import type { TTradeStatusType } from "../models/trade-status-type";
 import TradeSuggestionModel, {
 	type TTradeSuggestion,
@@ -746,6 +746,75 @@ class TradingService {
 			suggestion.subjectUserId,
 		]);
 	}
+
+	public async getTradeData(
+		tradeId: number,
+		user: TUser,
+	): Promise<
+		TTrade & {
+			suggestions: HydratedTradeSuggestion[];
+			statusHistory: TradeStatusChange[];
+		}
+	> {
+		// TTrade & {
+		//
+		// }
+		const trade = await dbManager.db.query.trades.findFirst({
+			where: and(
+				eq(trades.id, tradeId),
+				or(
+					eq(trades.receivingUserId, user.id),
+					eq(trades.requestingUserId, user.id),
+				),
+			),
+			with: {
+				statusHistory: {
+					with: {
+						statusType: true,
+					},
+					orderBy: desc(tradeStatusChanges.changedAt),
+				},
+				statusType: true,
+				suggestions: {
+					orderBy: [desc(tradeSuggestions.createdAt)],
+					with: {
+						suggestionPlants: true,
+					},
+				},
+			},
+		});
+		if (!trade) {
+			throw new AppError("Could not find trade", 404);
+		}
+
+		const suggestions: (TradeSuggestion & {
+			suggestionPlants: CollectedPlant[];
+		})[] = [];
+
+		const i = 0;
+		for (const suggestion of trade.suggestions) {
+			const hydratedPlants = await Promise.all(
+				suggestion.suggestionPlants.map(async (p) => {
+					const plant = await dbManager.db.query.plants.findFirst({
+						where: eq(plants.id, p.plantId),
+					});
+					if (!plant) {
+						throw new AppError("missing plant?!");
+					}
+
+					return plantService.getCollectedPlant(plant, user.id);
+				}),
+			);
+
+			suggestions[i] = {
+				...trade.suggestions[i],
+				suggestionPlants: hydratedPlants,
+			} as TradeSuggestion & {
+				suggestionPlants: CollectedPlant[];
+			};
+		}
+		return { ...trade, suggestions };
+	}
 }
 
 interface Trade {
@@ -784,4 +853,14 @@ export interface TradeMatch {
 	speciesMatches: number;
 	otherMatches: number;
 	tradeInProgress: number;
+}
+
+export type HydratedTradeSuggestion = TradeSuggestion & {
+	suggestionPlants: CollectedPlant[];
+};
+
+export interface TradeStatusChange {
+	id: number;
+	changedAt: Date;
+	statusType: TradeStatus;
 }

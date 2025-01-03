@@ -1,4 +1,9 @@
-import { type InferInsertModel, type InferSelectModel, eq } from "drizzle-orm";
+import {
+	type InferInsertModel,
+	type InferSelectModel,
+	eq,
+	or,
+} from "drizzle-orm";
 import dbManager from "../db";
 import { users } from "../db/schema";
 import { AppError } from "../utils/errors";
@@ -85,25 +90,37 @@ export default class UserModel {
 		return user;
 	}
 
-	public async create({ email, password }: TUserCreateArgs): Promise<TUser> {
+	public async create({
+		email,
+		password,
+		username,
+	}: TUserCreateArgs): Promise<TUser> {
 		/**
 		 * @todo
 		 * - add unique constraint to email
 		 */
+		const orLogic = [eq(users.email, email)];
+		if (username) {
+			orLogic.push(eq(users.username, username));
+		}
+
 		const existingUserQ = dbManager.db
 			.select()
 			.from(users)
-			.where(eq(users.email, email))
+			.where(or(...orLogic))
 			.prepare(`existingUserQ${new Date().getTime()}`);
 
 		const [alreadyExists, ..._1] = await existingUserQ.execute();
 		if (alreadyExists) {
-			throw new AppError("An Account with this email already exists", 400);
+			throw new AppError(
+				"An Account with this email or username already exists",
+				400,
+			);
 		}
 
 		const [newUser, ..._2] = await dbManager.db
 			.insert(users)
-			.values({ email, password })
+			.values({ email, password, username })
 			.returning();
 
 		if (newUser) {

@@ -2,6 +2,7 @@ import type { ServerResponse } from "node:http";
 import type { Response } from "express";
 import Redis from "ioredis";
 import { REDIS_CONFIG } from "../redis";
+import envVars from "../utils/environment";
 import type { TradeMatch, Trades } from "./trading";
 
 export type NotificationPayload = {
@@ -10,18 +11,15 @@ export type NotificationPayload = {
 };
 
 export class NotificationsService {
-	private publisher: Redis;
-	private subscriber: Redis;
+	protected publisher: Redis;
+	protected subscriber: Redis;
 
-	// private connections: Set<Response>;
-	private static instance: NotificationsService;
-	private userConnections: Map<string, Set<Response>> = new Map();
+	protected static instance: NotificationsService;
+	protected userConnections: Map<string, Set<Response>> = new Map();
 
-	private constructor() {
+	constructor() {
 		this.publisher = new Redis(REDIS_CONFIG);
 		this.subscriber = new Redis(REDIS_CONFIG);
-
-		// this.connections = new Set();
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
@@ -33,7 +31,6 @@ export class NotificationsService {
 		}
 		this.userConnections.get(userId)?.add(res);
 
-		// Send a connection success message
 		res.write(`data: ${JSON.stringify({ type: "CONNECTED" })}\n\n`);
 	}
 	removeConnection(userId: string, res: Response) {
@@ -46,7 +43,7 @@ export class NotificationsService {
 		}
 	}
 
-	private setupRedisErrorHandling() {
+	protected setupRedisErrorHandling() {
 		for (const client of [this.publisher, this.subscriber]) {
 			client.on("error", (error) => {
 				console.error("Redis error:", error);
@@ -62,7 +59,7 @@ export class NotificationsService {
 		}
 	}
 
-	private initializeSubscriber() {
+	protected initializeSubscriber() {
 		this.subscriber.subscribe("trade-notifications");
 
 		this.subscriber.on("message", (channel, message) => {
@@ -74,7 +71,7 @@ export class NotificationsService {
 		});
 	}
 
-	private broadcastToUser(userId: string, message: string) {
+	protected broadcastToUser(userId: string, message: string) {
 		const userSet = this.userConnections.get(userId);
 		if (userSet) {
 			// biome-ignore lint/complexity/noForEach: <explanation>
@@ -85,28 +82,19 @@ export class NotificationsService {
 	}
 
 	static getInstance(): NotificationsService {
+		console.log(envVars.get("NODE_ENV"));
+		if (envVars.get("NODE_ENV") === "test") {
+			if (!TestNotificationsService.instance) {
+				return new TestNotificationsService();
+			}
+			return TestNotificationsService.instance;
+		}
+
 		if (!NotificationsService.instance) {
 			NotificationsService.instance = new NotificationsService();
 		}
 		return NotificationsService.instance;
 	}
-
-	// addConnection(res: Response) {
-	// 	this.connections.add(res);
-	// 	// Send a connection success message
-	// 	res.write(`data: ${JSON.stringify({ type: "CONNECTED" })}\n\n`);
-	// }
-
-	// removeConnection(res: Response) {
-	// 	this.connections.delete(res);
-	// }
-
-	// private broadcast(message: string) {
-	// 	// biome-ignore lint/complexity/noForEach: <explanation>
-	// 	const x = this.userConnections.forEach((res) => {
-	// 		res.write(`data: ${message}\n\n`);
-	// 	});
-	// }
 
 	async publishToUser(userId: string, notification: NotificationPayload) {
 		const message = JSON.stringify({ userId, ...notification });
@@ -124,4 +112,12 @@ export class NotificationsService {
 		this.publisher.disconnect();
 		this.subscriber.disconnect();
 	}
+}
+
+export class TestNotificationsService extends NotificationsService {
+	// constructor() {
+	// 	super();
+	// }
+
+	protected setupRedisErrorHandling() {}
 }

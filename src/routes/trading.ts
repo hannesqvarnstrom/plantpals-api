@@ -122,6 +122,19 @@ tradingRouter.get("/", async (req, res, next) => {
 	}
 });
 
+tradingRouter.get("/:tradeId", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const tradeData = await tradingService.getTradeData(
+			Number(req.params.tradeId),
+			user,
+		);
+		return res.send(tradeData);
+	} catch (e) {
+		return next(e);
+	}
+});
+
 tradingRouter.post(
 	"/:tradeId/suggestions/:suggestionId/accept",
 	async (req, res, next) => {
