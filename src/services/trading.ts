@@ -181,7 +181,14 @@ class TradingService {
 	> {
 		const userPlants = await plantService.getUserCollection(user.id);
 		const userInterests = await userService.getInterests(user.id);
-
+		if (
+			(!userInterests.family.length &&
+				!userInterests.genus.length &&
+				!userInterests.species.length) ||
+			!userPlants.length
+		) {
+			return [];
+		}
 		const requireSomeInterests = or(
 			inArray(
 				speciesInterests.speciesId,

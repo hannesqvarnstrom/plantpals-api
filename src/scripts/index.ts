@@ -12,7 +12,6 @@ function run(scriptName: string, otherArgs?: string[]) {
 		throw new Error("argument for script name is required");
 	}
 
-	console.log("scriptName:", scriptName);
 	switch (scriptName) {
 		case "scrape-family-names":
 			scrapeFamilyNames();
@@ -35,7 +34,7 @@ function run(scriptName: string, otherArgs?: string[]) {
 			break;
 		case "fix-species-ranks": {
 			if (!otherArgs || !otherArgs.length) {
-				throw new Error("specific family name needed");
+				throw new Error("starting number needed");
 			}
 			const start: number = Number.parseInt(otherArgs[0] as string);
 

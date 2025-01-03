@@ -30,7 +30,7 @@ export const errorHandler = (
 	err.status = err.status || "error";
 	err.statusCode = err.statusCode || 500;
 
-	return res.status(err.statusCode).send({ error: err.message });
+	return res.status(err.statusCode).send(err.message);
 };
 
 function isValidationError(err: unknown): err is ZodError {

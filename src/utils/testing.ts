@@ -8,6 +8,7 @@ import type {
 	registerSchema,
 } from "../routes/schemas";
 import envVars from "./environment";
+import { AppError } from "./errors";
 import makeServer from "./server";
 
 /**
@@ -20,6 +21,7 @@ export class TestManager {
 	public running = false;
 
 	async resetDB() {
+		throw new AppError("NOT SUPPORTED RIGHT NOW, WILL KILL LOCAL DB IF RUN");
 		await dbManager.refreshConnection();
 		await dbManager.migrateLatest();
 	}

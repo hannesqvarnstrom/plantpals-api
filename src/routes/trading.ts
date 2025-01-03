@@ -122,6 +122,39 @@ tradingRouter.get("/", async (req, res, next) => {
 	}
 });
 
+tradingRouter.get("/match", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const tradeMatches = await tradingService.getAllPossibleTradesForUser(user);
+		return res.send(tradeMatches);
+	} catch (e) {
+		return next(e);
+	}
+});
+
+tradingRouter.get(
+	"/match/check",
+	validateRequest<typeof getMatchCheckSchema>({ query: getMatchCheckSchema }),
+	async (req, res, next) => {
+		const { objectUserId } = req.query;
+
+		if (!objectUserId || !req.user) {
+			throw new AppError("missing users");
+		}
+		try {
+			const plantsForTradeMatch = await tradingService.getPlantsForTradeMatch(
+				req.user,
+				Number(objectUserId),
+			);
+			setTimeout(() => {
+				return res.send(plantsForTradeMatch);
+			}, 1000);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
+
 tradingRouter.get("/:tradeId", async (req, res, next) => {
 	try {
 		const user = requireUser(req);
@@ -191,39 +224,6 @@ tradingRouter.get(
 				user,
 			);
 			return res.send(suggestionData);
-		} catch (e) {
-			return next(e);
-		}
-	},
-);
-
-tradingRouter.get("/match", async (req, res, next) => {
-	try {
-		const user = requireUser(req);
-		const tradeMatches = await tradingService.getAllPossibleTradesForUser(user);
-		return res.send(tradeMatches);
-	} catch (e) {
-		return next(e);
-	}
-});
-
-tradingRouter.get(
-	"/match/check",
-	validateRequest<typeof getMatchCheckSchema>({ query: getMatchCheckSchema }),
-	async (req, res, next) => {
-		const { objectUserId } = req.query;
-
-		if (!objectUserId || !req.user) {
-			throw new AppError("missing users");
-		}
-		try {
-			const plantsForTradeMatch = await tradingService.getPlantsForTradeMatch(
-				req.user,
-				Number(objectUserId),
-			);
-			setTimeout(() => {
-				return res.send(plantsForTradeMatch);
-			}, 1000);
 		} catch (e) {
 			return next(e);
 		}
