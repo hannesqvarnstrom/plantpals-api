@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { Express } from "express-serve-static-core";
 import request from "supertest";
 import sinon from "ts-sinon";
@@ -21,14 +22,16 @@ export class TestManager {
 	public running = false;
 
 	async resetDB() {
-		throw new AppError("NOT SUPPORTED RIGHT NOW, WILL KILL LOCAL DB IF RUN");
+		if (!envVars.get("DB_TEST_CONNECTION")) {
+			throw new AppError("Trying to run tests against a non-testing database");
+		}
 		await dbManager.refreshConnection();
 		await dbManager.migrateLatest();
 	}
 
 	async resetEnvVars() {
 		const testEnvVars = {
-			DB_CONNECTION: envVars.get("DB_TEST_CONNECTION"),
+			DATABASE_URL: envVars.get("DB_TEST_CONNECTION"),
 			NODE_ENV: "test",
 		};
 
@@ -55,10 +58,32 @@ export class TestManager {
 			return;
 		}
 
-		await dbManager.truncateTables();
+		await this.truncateTables();
 		await dbManager.pool.end();
 		envVars.restore();
 		sinon.restore();
+	}
+
+	public async truncateTables() {
+		const env = envVars.get("NODE_ENV");
+		if (env !== "test")
+			throw new Error("Truncating tables not available outside of testing");
+
+		await dbManager.refreshConnection();
+		const result = await dbManager.db.execute(
+			sql.raw(`
+		        select
+		            table_schema||'.'||table_name as table_fullname
+		        from
+		            information_schema."tables"
+		        where
+		            table_schema = 'public';`),
+		);
+
+		const tableNames = result.rows.map((row) => row.table_fullname).join(", ");
+		const sqlStatement = `truncate ${tableNames} restart identity;`;
+		await dbManager.db.execute(sql.raw(sqlStatement));
+		return;
 	}
 
 	request() {

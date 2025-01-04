@@ -1,10 +1,10 @@
 import type { ServerResponse } from "node:http";
 import type { Response } from "express";
 import Redis from "ioredis";
+import RedisMock from "ioredis-mock";
 import { REDIS_CONFIG } from "../redis";
 import envVars from "../utils/environment";
 import type { TradeMatch, Trades } from "./trading";
-
 export type NotificationPayload = {
 	type: "MATCHES_UPDATE" | "TRADES_UPDATE";
 	payload: TradeMatch[] | Trades | undefined;
@@ -17,9 +17,9 @@ export class NotificationsService {
 	protected static instance: NotificationsService;
 	protected userConnections: Map<string, Set<Response>> = new Map();
 
-	constructor() {
-		this.publisher = new Redis(REDIS_CONFIG);
-		this.subscriber = new Redis(REDIS_CONFIG);
+	constructor(publisher?: Redis, subscriber?: Redis) {
+		this.publisher = publisher || new Redis(REDIS_CONFIG);
+		this.subscriber = subscriber || new Redis(REDIS_CONFIG);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
@@ -82,10 +82,9 @@ export class NotificationsService {
 	}
 
 	static getInstance(): NotificationsService {
-		console.log(envVars.get("NODE_ENV"));
 		if (envVars.get("NODE_ENV") === "test") {
 			if (!TestNotificationsService.instance) {
-				return new TestNotificationsService();
+				return new TestNotificationsService(new RedisMock(), new RedisMock());
 			}
 			return TestNotificationsService.instance;
 		}
@@ -115,9 +114,5 @@ export class NotificationsService {
 }
 
 export class TestNotificationsService extends NotificationsService {
-	// constructor() {
-	// 	super();
-	// }
-
 	protected setupRedisErrorHandling() {}
 }

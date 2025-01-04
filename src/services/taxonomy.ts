@@ -150,7 +150,7 @@ class TaxonomyService {
 			: searchWhere;
 
 		const results = await dbManager.db
-			.selectDistinctOn([species.id], {
+			.selectDistinctOn([species.id, plants.type], {
 				id: plants.id,
 				speciesId: species.id,
 				type: plants.type,
@@ -734,7 +734,7 @@ class TaxonomyService {
 			case "cross": {
 				if (!crossMomId || !crossDadId) {
 					throw new AppError(
-						"both parents must be supplied to create a cross",
+						"Both parents must be supplied to create a cross",
 						400,
 					);
 				}
@@ -742,14 +742,11 @@ class TaxonomyService {
 				const dadSpecies = await this.speciesModel.getById(crossDadId);
 
 				if (!momSpecies || !dadSpecies) {
-					throw new AppError("both parents must exist to create a cross", 400);
+					throw new AppError("Both parents must exist to create a cross", 400);
 				}
 
 				if (momSpecies.genusId !== dadSpecies.genusId) {
-					throw new AppError(
-						"both parents must be within the selected genus",
-						400,
-					);
+					throw new AppError("Both parents must be within the same genus", 400);
 				}
 
 				if (name) {

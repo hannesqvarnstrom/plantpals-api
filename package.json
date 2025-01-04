@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --verbose --detectOpenHandles",
+    "test": "NODE_ENV=test jest --verbose --forceExit",
     "dev:start": "ts-node src/index.ts",
     "dev": "nodemon -L",
     "build": "tsc",
@@ -45,6 +45,7 @@
     "express": "^4.19.2",
     "google-auth-library": "^9.10.0",
     "ioredis": "^5.4.2",
+    "ioredis-mock": "^8.9.0",
     "jsonwebtoken": "^9.0.2",
     "nodemon": "^3.1.1",
     "pg": "^8.11.5",

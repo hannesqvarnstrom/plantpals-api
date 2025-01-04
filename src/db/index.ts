@@ -35,27 +35,6 @@ export class DatabaseManager {
 	public async refreshConnection() {
 		this.connect(envVars.get("DATABASE_URL"));
 	}
-
-	public async truncateTables() {
-		const env = envVars.get("NODE_ENV");
-		if (env !== "test")
-			throw new Error("Truncating tables not available outside of testing");
-
-		const result = await this.db.execute(
-			sql.raw(`
-                select 
-                    table_schema||'.'||table_name as table_fullname
-                from 
-                    information_schema."tables"
-                where 
-                    table_schema = 'public';`),
-		);
-
-		const tableNames = result.rows.map((row) => row.table_fullname).join(", ");
-		const sqlStatement = `truncate ${tableNames} restart identity;`;
-		await this.db.execute(sql.raw(sqlStatement));
-		return;
-	}
 }
 
 const dbManager = new DatabaseManager();

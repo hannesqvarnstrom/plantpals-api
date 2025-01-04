@@ -78,7 +78,7 @@ describe("POST users", () => {
 
 describe("DatabaseManager", () => {
 	it("should connect and be able to query successfully", async () => {
-		await dbManager.truncateTables();
+		await testManager.truncateTables();
 		const result = await dbManager.db.select().from(users);
 		expect(result.length).toBe(0);
 	});
@@ -139,12 +139,13 @@ describe("Authentication", () => {
 					.stub(oauthService, "verifyGoogleToken")
 					.resolves({ email: email, id: gId });
 			});
-			afterAll(async () => {
+			afterAll(() => {
 				oauthVerifyTokenStub.restore();
+				return;
 			});
 
 			beforeEach(async () => {
-				await dbManager.truncateTables();
+				await testManager.truncateTables();
 			});
 
 			it("validates post body", async () => {
