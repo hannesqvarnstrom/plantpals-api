@@ -9,7 +9,6 @@ const pool = new Pool({
 });
 
 const db = drizzle(pool);
-console.log(db);
 migrate(db, {
   migrationsFolder: "./drizzle",
 }).then((result) => {

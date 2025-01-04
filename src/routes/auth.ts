@@ -29,6 +29,7 @@ const signAndSendUserToken = (user: TUser, res: Response) => {
 		token,
 		userId: user.id,
 		expiry: new Date().setTime(new Date().getTime() + JWTExpiresIn * 1000),
+		username: user.username,
 		// expiresIn: JWTExpiresIn,
 	});
 };
@@ -63,7 +64,8 @@ authRouter.post(
 		try {
 			const { providerToken } = req.body;
 
-			const { email, id } = await oauthService.verifyGoogleToken(providerToken);
+			const { email, id, username } =
+				await oauthService.verifyGoogleToken(providerToken);
 
 			const userIdentity = await authService.findUserIdentity(id, "GOOGLE");
 			if (userIdentity) {
@@ -74,7 +76,7 @@ authRouter.post(
 				let user = await userService.getByEmail(email);
 
 				if (!user) {
-					user = await userService.createUser({ email });
+					user = await userService.createUser({ email, username });
 				} else {
 					// @todo - if user already exists in the app,
 					// force them to input their existing password to link the accounts

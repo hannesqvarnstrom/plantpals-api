@@ -13,7 +13,7 @@ services:
       - postgres
       - redis
     environment:
-      DATABASE_URL: postgres://postgres@postgres/plant_catalog
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/plant_catalog
       REDIS_URL: redis://redis:6379
       #PORT: 5000
   
@@ -24,6 +24,9 @@ services:
     environment:
       POSTGRES_DB: plant_catalog
       POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+      - ./data/saves:/saves
 
   redis:
     image: redis:alpine

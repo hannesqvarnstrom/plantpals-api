@@ -79,7 +79,7 @@ export const updateMeSchema = z
 		oldPassword: z.string().min(6).optional(),
 		newPassword: z.string().min(6).optional(),
 		newPasswordConfirmation: z.string().min(6).optional(),
-		username: z.string().min(4),
+		username: z.string().min(4).optional(),
 		// })
 	})
 	.superRefine(({ oldPassword, newPassword, newPasswordConfirmation }, ctx) => {

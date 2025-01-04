@@ -1,12 +1,10 @@
 import cors from "cors";
 import express from "express";
 import type { Express } from "express-serve-static-core";
-import dbManager from "../db";
 import { errorHandler } from "../middleware/error-handling";
 import type { JwtPayload } from "../middleware/jwt";
 import type { TUser } from "../models/user";
 import routes from "../routes";
-import authService, { AuthenticationService } from "../services/authentication";
 import { NotificationsService } from "../services/notifications";
 // import { TUser } from '../models/user'
 
