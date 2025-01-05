@@ -35,7 +35,7 @@ import TradeSuggestionPlantModel from "../models/trade-suggestion-plant";
 import UserModel, { type TUser } from "../models/user";
 import { AppError } from "../utils/errors";
 import { NotificationsService } from "./notifications";
-import plantService, { type CollectedPlant } from "./plant";
+import plantService, { type PlantTypeCol, type CollectedPlant } from "./plant";
 import taxonomyService from "./taxonomy";
 import userService, {
 	type FamilyInterest,
@@ -528,6 +528,105 @@ class TradingService {
 				plantService.getCollectedPlant(plant, user.id),
 			),
 		);
+	}
+
+	public async getTradeDataForSpeciesForUser(
+		speciesId: number,
+		user: TUser,
+	): Promise<unknown> {
+		// maybe not even needed..
+		const userPlants = await plantService.getUserCollection(user.id);
+		const userInterests = await userService.getInterests(user.id);
+		const spec = await dbManager.db.query.species.findFirst({
+			where: eq(species.id, speciesId),
+		});
+
+		if (!spec) {
+			throw new AppError("Unable to find species");
+		}
+		const usersThatHaveItAvailable = await dbManager.db
+			.selectDistinctOn([users.id], {
+				id: users.id,
+				username: users.username,
+				plantTypesAvailable: sql<
+					PlantTypeCol[] | null
+				>`CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+					array_to_json(
+						array_agg(
+							distinct plants.type
+						)
+					) 
+				ELSE
+					null
+				END`.as("plant_types_available"),
+			})
+			.from(users)
+			.groupBy(users.id)
+			.where(not(eq(users.id, user.id)))
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), eq(plants.speciesId, speciesId)),
+			)
+			.innerJoin(tradeablePlants, eq(plants.id, tradeablePlants.plantId));
+
+		const requireSomeInterests = or(
+			inArray(
+				speciesInterests.speciesId,
+				userPlants.map((plant) => plant.speciesId),
+			),
+			inArray(
+				genusInterests.genusId,
+				userPlants.map((plant) => plant.genusId),
+			),
+			inArray(
+				familyInterests.familyId,
+				userPlants.map((plant) => plant.familyId),
+			),
+		);
+		const usersThatAreATradeMatch = await dbManager.db
+			.select({ id: users.id })
+			.from(users)
+			.where(
+				and(
+					inArray(
+						users.id,
+						usersThatHaveItAvailable.map((u) => u.id),
+					),
+					requireSomeInterests,
+					not(eq(users.id, user.id)),
+				),
+			)
+
+			.groupBy(users.id)
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
+
+		const usersThatWantIt = await dbManager.db
+			.selectDistinctOn([users.id], { id: users.id, username: users.username })
+			.from(users)
+			.where(
+				and(
+					not(eq(users.id, user.id)),
+					or(
+						eq(speciesInterests.speciesId, speciesId),
+						eq(genusInterests.genusId, spec.genusId),
+						eq(familyInterests.familyId, spec.familyId),
+					),
+				),
+			)
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
+
+		const { scientificPortions, name: fullName } =
+			await taxonomyService.getScientificallySplitName(speciesId);
+		return {
+			usersThatHaveItAvailable,
+			usersThatAreATradeMatch,
+			usersThatWantIt,
+			name: { scientificPortions, fullName },
+		};
 	}
 
 	public async getTradeMatchesForSpecies(

@@ -19,7 +19,7 @@ export const users = pgTable(
 		id: serial("id").primaryKey(),
 		email: text("email").notNull(),
 		password: varchar("password"),
-		username: varchar("userame"),
+		username: varchar("username"),
 		lastLogAt: timestamp("last_log_at", { mode: "date" }),
 	},
 	(users) => ({

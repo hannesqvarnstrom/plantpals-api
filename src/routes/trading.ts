@@ -204,7 +204,7 @@ tradingRouter.post(
 tradingRouter.get("/species/:speciesId", async (req, res, next) => {
 	try {
 		const user = requireUser(req);
-		const tradeMatches = await tradingService.getTradeMatchesForSpecies(
+		const tradeMatches = await tradingService.getTradeDataForSpeciesForUser(
 			Number(req.params.speciesId),
 			user,
 		);
