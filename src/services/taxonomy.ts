@@ -90,8 +90,6 @@ class TaxonomyService {
 		//     speciesQuery
 		// }
 
-		console.log("speciesQuery:", speciesQuery);
-
 		return speciesQuery;
 	}
 
@@ -656,7 +654,6 @@ class TaxonomyService {
 		args: Zod.infer<typeof postSpeciesSubmissionSchema>,
 		user: TUser,
 	): Promise<{ newSpecies: TSpecies; submission: TUserSpeciesSubmission }> {
-		console.log("args:", args);
 		const { valid, reason } = await this.validateSpeciesSubmission(args);
 		if (!valid) {
 			throw new AppError(reason, 400);

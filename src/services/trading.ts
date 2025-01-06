@@ -118,7 +118,7 @@ class TradingService {
 					eq(tradeStatusTypes.id, tradeStatusChanges.statusId),
 				)
 				.orderBy(desc(tradeStatusChanges.changedAt));
-			console.log({ status, history });
+
 			if (!status) {
 				throw new AppError("couldnt find status for a trade", 500);
 			}
@@ -149,7 +149,6 @@ class TradingService {
 				createdAt: trade.createdAt,
 				suggestionHistory: suggestionHistory.slice(1),
 			};
-			// console.log("hydratedTrade:", hydratedTrade);
 
 			if (
 				currentSuggestion.objectUserId === userId &&

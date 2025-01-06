@@ -50,7 +50,6 @@ class PlantService {
 	public async getUserCollection(
 		user: number | TUser,
 	): Promise<CollectedPlant[]> {
-		console.log("user:", user);
 		let userId: number;
 		if (typeof user === "number") {
 			userId = user;
@@ -63,7 +62,6 @@ class PlantService {
 		for (const plant of plants) {
 			const collectedPlant = await this.getCollectedPlant(plant, userId);
 			collection.push(collectedPlant);
-			// console.log(collectedPlant.collectedByUser)
 		}
 
 		return collection;
