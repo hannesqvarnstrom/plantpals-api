@@ -21,6 +21,8 @@ export const users = pgTable(
 		password: varchar("password"),
 		username: varchar("username"),
 		lastLogAt: timestamp("last_log_at", { mode: "date" }),
+		passwordSet: boolean("password_set").default(false),
+		emailVerified: boolean("email_verified").default(false),
 	},
 	(users) => ({
 		emailIdx: index("users_email_index").on(users.email),

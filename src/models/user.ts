@@ -14,8 +14,9 @@ export type TUser = Omit<RawUser, "password" | "email">;
 
 export default class UserModel {
 	public static factory(params: RawUser): TUser {
-		const { email, id, lastLogAt, username } = params;
-		return { id, lastLogAt, username };
+		const { email, id, lastLogAt, username, emailVerified, passwordSet } =
+			params;
+		return { id, lastLogAt, username, emailVerified, passwordSet };
 	}
 
 	/**
@@ -59,14 +60,15 @@ export default class UserModel {
 		throw new AppError("", 404);
 	}
 
-	public async updateById(
-		id: number,
-		payload: { password?: string; lastLogAt?: Date } = {},
-	) {
-		console.log("payload", payload);
+	public async updateById(id: number, payload: { password?: string } = {}) {
+		const fullPayload: { password?: string; passwordSet?: boolean } = payload;
+		if (payload.password) {
+			fullPayload.passwordSet = true;
+		}
+
 		const q = dbManager.db
 			.update(users)
-			.set(payload)
+			.set({ ...fullPayload })
 			.where(eq(users.id, id))
 			.returning()
 			.prepare(`updateById${new Date().getTime()}`);
@@ -120,7 +122,7 @@ export default class UserModel {
 
 		const [newUser, ..._2] = await dbManager.db
 			.insert(users)
-			.values({ email, password, username })
+			.values({ email, password, username, passwordSet: !!password })
 			.returning();
 
 		if (newUser) {

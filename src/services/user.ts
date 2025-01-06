@@ -61,34 +61,14 @@ class UserService {
 	 */
 	public async updateById(
 		id: number,
-		{
-			oldPassword,
-			newPassword,
-			username,
-		}: SchemaInterface<typeof updateMeSchema>,
+		{ password, username }: SchemaInterface<typeof updateMeSchema>,
 	) {
 		const user = await this.model.getRawById(id);
 
 		const payload: UpdateUserPayload = { username };
-		if (oldPassword) {
-			if (!user.password) {
-				throw new AppError("User does not use passwords", 400);
-			}
-
-			const oldPasswordMatches = await AuthenticationService.compare(
-				oldPassword,
-				user.password,
-			);
-			if (!oldPasswordMatches) {
-				throw new AppError("Old password seems to be wrong", 400);
-			}
-
-			if (!newPassword) {
-				throw new AppError("New password is missing entirely", 400);
-			}
-
+		if (password) {
 			const newPasswordHash =
-				await AuthenticationService.hashPassword(newPassword);
+				await AuthenticationService.hashPassword(password);
 			payload.password = newPasswordHash;
 		}
 
