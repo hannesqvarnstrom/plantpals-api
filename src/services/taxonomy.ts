@@ -1,4 +1,16 @@
-import { and, eq, ilike, inArray, not, or, sql } from "drizzle-orm";
+import {
+	and,
+	countDistinct,
+	eq,
+	exists,
+	ilike,
+	inArray,
+	isNull,
+	max,
+	not,
+	or,
+	sql,
+} from "drizzle-orm";
 import type { z } from "zod";
 import dbManager from "../db";
 import {
@@ -32,6 +44,7 @@ import { AppError } from "../utils/errors";
 import plantService, {
 	type CollectedPlant,
 	type PerfectMatchTrade,
+	type PlantTypeCol,
 	PossibleTrades,
 } from "./plant";
 import userService from "./user";
@@ -79,8 +92,6 @@ class TaxonomyService {
 		//     speciesQuery
 		// }
 
-		console.log("speciesQuery:", speciesQuery);
-
 		return speciesQuery;
 	}
 
@@ -123,77 +134,87 @@ class TaxonomyService {
 	): Promise<HydratedSpeciesSearchResult[]> {
 		const searchTerms = q.toLowerCase().trim().split(/\s+/);
 
-		// Create individual ILIKE conditions for each term
 		const searchConditions = searchTerms.map((term) => {
 			const termQuery = `%${term === "x" ? "×" : term}%`;
 			return or(
-				// Search in the main name
 				ilike(species.name, termQuery),
-				// Search in vernacular names
 				// ilike(species.vernacularNames, termQuery),
 				sql`EXISTS (
                     SELECT 1
                     FROM jsonb_array_elements_text(${species.vernacularNames}) as vname
                     WHERE vname ILIKE ${termQuery}
                 )`,
-				// Search in cultivar name
+				ilike(species.speciesName, termQuery),
 				ilike(species.cultivarName, termQuery),
-				// Search in genus name
 				ilike(genera.name, termQuery),
 			);
 		});
 
-		// Combine all conditions with AND to ensure all terms are found
 		const searchWhere = and(...searchConditions);
 		const finalWhere = excludeRank
 			? and(searchWhere, not(eq(species.rank, excludeRank)))
 			: searchWhere;
 
+		const selectCols = {
+			id: species.id,
+			name: species.name,
+
+			genusId: genera.id,
+			familyId: families.id,
+			genusName: genera.name,
+			familyName: families.name,
+			numOfUsersWithSpecies: countDistinct(plants.userId),
+			plantTypesAvailable: sql<PlantTypeCol[] | null>`
+					CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+						array_to_json(
+							array_agg(
+								distinct plants.type
+							)
+						) 
+					ELSE
+						null
+					END`.as("plant_types_available"),
+		};
+
 		const results = await dbManager.db
-			.selectDistinctOn([species.id, plants.type], {
-				id: plants.id,
-				speciesId: species.id,
-				type: plants.type,
-				name: species.name,
-				genusId: species.genusId,
-				familyId: species.familyId,
-				gbifKey: species.gbifKey,
-				gbifFamilyKey: species.gbifFamilyKey,
-				gbifGenusKey: species.gbifGenusKey,
-				vernacularNames: species.vernacularNames,
-				rank: species.rank,
-				collectedByUser: userId
-					? sql<boolean>`${userId} in (${plants.userId})`
-					: sql<boolean>`false`,
-				createdAt: species.createdAt,
-				speciesName: species.speciesName,
-				cultivarName: species.cultivarName,
-				crossMomId: species.crossMomId,
-				crossDadId: species.crossDadId,
-				parentSpeciesId: species.parentSpeciesId,
-				userSubmitted: species.userSubmitted,
-				genusName: genera.name,
-				familyName: families.name,
-				openForTrade: sql<boolean>`(${tradeablePlants.id}) IS NOT NULL`,
-			})
+			.selectDistinctOn([species.id], selectCols)
 			.from(species)
-			.leftJoin(plants, eq(plants.speciesId, species.id))
-			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.where(finalWhere)
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
-			.where(finalWhere)
+			.leftJoin(
+				plants,
+				and(
+					eq(plants.speciesId, species.id),
+					isNull(plants.deletedAt),
+					exists(
+						dbManager.db
+							.select({ id: tradeablePlants.id })
+							.from(tradeablePlants)
+							.where(eq(tradeablePlants.plantId, plants.id)),
+					),
+					not(eq(plants.userId, userId ?? -1)), // @todo this is ugly
+				),
+			)
 			.limit(30)
+			.groupBy(species.id, genera.id, families.id)
 			.offset(page ? page * 30 : 0);
 
 		const mappedResults: HydratedSpeciesSearchResult[] = [];
+
 		for (const item of results) {
-			const nameData = await this.getScientificallySplitName(item.speciesId);
-			mappedResults.push({
+			const nameData = await this.getScientificallySplitName(item.id);
+			const result = {
 				...item,
-				fullName: nameData.name,
-				scientificPortions: nameData.scientificPortions,
-			});
+				name: {
+					fullName: nameData.name,
+					scientificPortions: nameData.scientificPortions,
+				},
+			} as HydratedSpeciesSearchResult;
+
+			mappedResults.push(result);
 		}
+
 		return mappedResults;
 	}
 
@@ -436,7 +457,13 @@ class TaxonomyService {
 		const [plant, ..._] = await dbManager.db
 			.select()
 			.from(plants)
-			.where(and(eq(plants.speciesId, speciesId), eq(plants.userId, user.id)));
+			.where(
+				and(
+					eq(plants.speciesId, speciesId),
+					eq(plants.userId, user.id),
+					isNull(plants.deletedAt),
+				),
+			);
 
 		if (!plant) {
 			throw new AppError("plant does not exist for user", 404);
@@ -473,6 +500,7 @@ class TaxonomyService {
 			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.where(
 				and(
+					isNull(plants.deletedAt),
 					inArray(
 						plants.speciesId,
 						requestingUserInterests.species.map(
@@ -540,6 +568,7 @@ class TaxonomyService {
 			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.where(
 				and(
+					isNull(plants.deletedAt),
 					eq(plants.speciesId, speciesId),
 					inArray(
 						speciesInterests.speciesId,
@@ -559,6 +588,7 @@ class TaxonomyService {
 				.from(plants)
 				.where(
 					and(
+						isNull(plants.deletedAt),
 						eq(plants.speciesId, requestingUserPlantId),
 						eq(plants.userId, user.id),
 					),
@@ -651,7 +681,6 @@ class TaxonomyService {
 		args: Zod.infer<typeof postSpeciesSubmissionSchema>,
 		user: TUser,
 	): Promise<{ newSpecies: TSpecies; submission: TUserSpeciesSubmission }> {
-		console.log("args:", args);
 		const { valid, reason } = await this.validateSpeciesSubmission(args);
 		if (!valid) {
 			throw new AppError(reason, 400);
@@ -1213,9 +1242,23 @@ function capitalizeFirstLetterInWords(s: string): string {
 const taxonomyService = new TaxonomyService();
 export default taxonomyService;
 
-export type HydratedSpeciesSearchResult = Omit<CollectedPlant, "id"> & {
-	id: number | null;
+export type HydratedSpeciesSearchResult = {
+	id: number;
+	name: {
+		fullName: string;
+		scientificPortions: string[];
+	};
+	genusId: number;
+	familyId: number;
+	genusName: string;
+	familyName: string;
+	plants?: CollectedPlant[];
+	gbifId?: string;
+	numOfUsersWithSpecies: number;
+	plantTypesAvailable: PlantTypeCol[] | null;
 };
+
+//Omit<CollectedPlant, "id">
 
 export interface HydratedGenusSearchResult {
 	name: string;

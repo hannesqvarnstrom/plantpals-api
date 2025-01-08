@@ -18,13 +18,22 @@ export type TTrade = RawTrade;
 
 export default class TradeModel {
 	public static factory(params: RawTrade): TTrade {
-		const { id, createdAt, requestingUserId, receivingUserId, statusId } =
-			params;
+		const {
+			id,
+			createdAt,
+			requestingUserId,
+			receivingUserId,
+			statusId,
+			completedByReceivingUser,
+			completedByRequestingUser,
+		} = params;
 		return {
 			id,
 			createdAt,
 			requestingUserId,
 			receivingUserId,
+			completedByReceivingUser,
+			completedByRequestingUser,
 			statusId,
 		};
 	}

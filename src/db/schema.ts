@@ -19,8 +19,10 @@ export const users = pgTable(
 		id: serial("id").primaryKey(),
 		email: text("email").notNull(),
 		password: varchar("password"),
-		username: varchar("userame"),
+		username: varchar("username"),
 		lastLogAt: timestamp("last_log_at", { mode: "date" }),
+		passwordSet: boolean("password_set").default(false),
+		emailVerified: boolean("email_verified").default(false),
 	},
 	(users) => ({
 		emailIdx: index("users_email_index").on(users.email),
@@ -184,12 +186,15 @@ export const plants = pgTable("plants", {
 		.references(() => species.id)
 		.notNull(),
 	type: plantTypeEnum("type").notNull(),
+	deletedAt: timestamp("deleted_at"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const tradeablePlants = pgTable("tradeable_plants", {
 	id: serial("id").primaryKey(),
-	plantId: integer("plant_id").references(() => plants.id),
+	plantId: integer("plant_id").references(() => plants.id, {
+		onDelete: "cascade",
+	}),
 	availableFrom: timestamp("available_from").defaultNow(),
 });
 
@@ -231,6 +236,12 @@ export const trades = pgTable("trades", {
 	receivingUserId: integer("receiving_user_id")
 		.references(() => users.id)
 		.notNull(),
+	completedByRequestingUser: boolean("completed_by_requesting_user").default(
+		false,
+	),
+	completedByReceivingUser: boolean("completed_by_receiving_user").default(
+		false,
+	),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	statusId: integer("status_id")
 		.references(() => tradeStatusTypes.id)
@@ -324,7 +335,8 @@ export const tradeSuggestionPlants = pgTable("trade_suggestion_plants", {
 		.references(() => tradeSuggestions.id)
 		.notNull(),
 	plantId: integer("plant_id")
-		.references(() => plants.id)
+		.references(() => plants.id, { onDelete: "cascade" })
+
 		.notNull(),
 });
 
@@ -349,6 +361,10 @@ export const tradeSuggestionPlantRelations = relations(
 			fields: [tradeSuggestionPlants.tradeSuggestionId],
 			references: [tradeSuggestions.id],
 			relationName: "suggestionPlants",
+		}),
+		plant: helpers.one(plants, {
+			fields: [tradeSuggestionPlants.plantId],
+			references: [plants.id],
 		}),
 	}),
 );

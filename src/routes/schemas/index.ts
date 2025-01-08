@@ -76,33 +76,25 @@ export const oauthGooglePostSchema = z
 export const updateMeSchema = z
 	.object({
 		// body: z.object({
-		oldPassword: z.string().min(6).optional(),
-		newPassword: z.string().min(6).optional(),
-		newPasswordConfirmation: z.string().min(6).optional(),
+		password: z.string().min(6).optional(),
+		passwordConfirmation: z.string().min(6).optional(),
 		username: z.string().min(4).optional(),
 		// })
 	})
-	.superRefine(({ oldPassword, newPassword, newPasswordConfirmation }, ctx) => {
+	.superRefine(({ password, passwordConfirmation }, ctx) => {
 		const issues: z.IssueData[] = [];
-		// const { oldPassword, newPassword, newPasswordConfirmation } = body
+		// const { oldPassword, password, passwordConfirmation } = body
 
-		if (oldPassword) {
-			if (!newPassword || !newPasswordConfirmation) {
-				issues.push({
-					code: "custom",
-					message: "Missing new replacement password",
-				});
-			}
-			if (newPassword !== newPasswordConfirmation) {
-				issues.push({
-					code: "custom",
-					message: "New password confirmation does not match",
-				});
-			}
-		} else if (newPassword && newPasswordConfirmation) {
+		if (!password || !passwordConfirmation) {
 			issues.push({
 				code: "custom",
-				message: "Old password is required to select a new one",
+				message: "Missing new replacement password",
+			});
+		}
+		if (password !== passwordConfirmation) {
+			issues.push({
+				code: "custom",
+				message: "New password confirmation does not match",
 			});
 		}
 
