@@ -156,31 +156,4 @@ export default class SpeciesModel {
 			.execute();
 		return userSpecies;
 	}
-
-	/**
-	 * @fråga LLM om hur man bäst strukturerar relations queries
-	 */
-
-	//     public async update(id: number, { name, fontSize, fromTrader, location, type }: Partial<InferInsertModel<typeof plants>>): Promise<TPlant> {
-	//         const updateObject: Partial<InferInsertModel<typeof plants>> = {}
-	//         if (name) updateObject.name = name
-	//         if (fontSize) updateObject.fontSize = fontSize
-	//         if (fromTrader || fromTrader === null) updateObject.fromTrader = fromTrader
-	//         if (location || location === '' || location === null) updateObject.location = location
-	//         if (type) updateObject.type = type
-
-	//         const query = dbManager.db.update(plants)
-	//             .set(updateObject)
-	//             .where(eq(plants.id, id))
-	//             .returning()
-	//             .prepare('updatePlant' + new Date().getTime())
-
-	//         const [result, ..._] = await query.execute()
-
-	//         if (!result) {
-	//             throw new AppError('Plant not found', 404)
-	//         }
-	//         return result
-	//     }
-	// }
 }

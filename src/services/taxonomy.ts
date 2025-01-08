@@ -2,8 +2,10 @@ import {
 	and,
 	countDistinct,
 	eq,
+	exists,
 	ilike,
 	inArray,
+	isNull,
 	max,
 	not,
 	or,
@@ -153,33 +155,47 @@ class TaxonomyService {
 			? and(searchWhere, not(eq(species.rank, excludeRank)))
 			: searchWhere;
 
-		const results = await dbManager.db
-			.selectDistinctOn([species.id], {
-				id: species.id,
-				name: species.name,
+		const selectCols = {
+			id: species.id,
+			name: species.name,
 
-				genusId: genera.id,
-				familyId: families.id,
-				genusName: genera.name,
-				familyName: families.name,
-				numOfUsersWithSpecies: countDistinct(plants.userId),
-				plantTypesAvailable: sql<PlantTypeCol[] | null>`
-						CASE WHEN MAX(plants.type) IS NOT NULL THEN 
-							array_to_json(
-								array_agg(
-									distinct plants.type
-								)
-							) 
-						ELSE
-							null
-						END`.as("plant_types_available"),
-			})
+			genusId: genera.id,
+			familyId: families.id,
+			genusName: genera.name,
+			familyName: families.name,
+			numOfUsersWithSpecies: countDistinct(plants.userId),
+			plantTypesAvailable: sql<PlantTypeCol[] | null>`
+					CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+						array_to_json(
+							array_agg(
+								distinct plants.type
+							)
+						) 
+					ELSE
+						null
+					END`.as("plant_types_available"),
+		};
+
+		const results = await dbManager.db
+			.selectDistinctOn([species.id], selectCols)
 			.from(species)
 			.where(finalWhere)
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
-			.leftJoin(plants, eq(plants.speciesId, species.id))
-			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.leftJoin(
+				plants,
+				and(
+					eq(plants.speciesId, species.id),
+					isNull(plants.deletedAt),
+					exists(
+						dbManager.db
+							.select({ id: tradeablePlants.id })
+							.from(tradeablePlants)
+							.where(eq(tradeablePlants.plantId, plants.id)),
+					),
+					not(eq(plants.userId, userId ?? -1)), // @todo this is ugly
+				),
+			)
 			.limit(30)
 			.groupBy(species.id, genera.id, families.id)
 			.offset(page ? page * 30 : 0);
@@ -188,13 +204,15 @@ class TaxonomyService {
 
 		for (const item of results) {
 			const nameData = await this.getScientificallySplitName(item.id);
-			mappedResults.push({
+			const result = {
 				...item,
 				name: {
 					fullName: nameData.name,
 					scientificPortions: nameData.scientificPortions,
 				},
-			} as HydratedSpeciesSearchResult);
+			} as HydratedSpeciesSearchResult;
+
+			mappedResults.push(result);
 		}
 
 		return mappedResults;
@@ -439,7 +457,13 @@ class TaxonomyService {
 		const [plant, ..._] = await dbManager.db
 			.select()
 			.from(plants)
-			.where(and(eq(plants.speciesId, speciesId), eq(plants.userId, user.id)));
+			.where(
+				and(
+					eq(plants.speciesId, speciesId),
+					eq(plants.userId, user.id),
+					isNull(plants.deletedAt),
+				),
+			);
 
 		if (!plant) {
 			throw new AppError("plant does not exist for user", 404);
@@ -476,6 +500,7 @@ class TaxonomyService {
 			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.where(
 				and(
+					isNull(plants.deletedAt),
 					inArray(
 						plants.speciesId,
 						requestingUserInterests.species.map(
@@ -543,6 +568,7 @@ class TaxonomyService {
 			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.where(
 				and(
+					isNull(plants.deletedAt),
 					eq(plants.speciesId, speciesId),
 					inArray(
 						speciesInterests.speciesId,
@@ -562,6 +588,7 @@ class TaxonomyService {
 				.from(plants)
 				.where(
 					and(
+						isNull(plants.deletedAt),
 						eq(plants.speciesId, requestingUserPlantId),
 						eq(plants.userId, user.id),
 					),
@@ -1225,6 +1252,7 @@ export type HydratedSpeciesSearchResult = {
 	familyId: number;
 	genusName: string;
 	familyName: string;
+	plants?: CollectedPlant[];
 	gbifId?: string;
 	numOfUsersWithSpecies: number;
 	plantTypesAvailable: PlantTypeCol[] | null;

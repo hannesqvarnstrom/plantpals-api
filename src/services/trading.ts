@@ -1,4 +1,5 @@
 import {
+	type InferInsertModel,
 	Subquery,
 	and,
 	countDistinct,
@@ -6,6 +7,7 @@ import {
 	eq,
 	exists,
 	inArray,
+	isNotNull,
 	isNull,
 	not,
 	or,
@@ -15,6 +17,7 @@ import dbManager from "../db";
 import {
 	familyInterests,
 	genusInterests,
+	plantTypeEnum,
 	plants,
 	species,
 	speciesInterests,
@@ -148,6 +151,10 @@ class TradingService {
 				status,
 				createdAt: trade.createdAt,
 				suggestionHistory: suggestionHistory.slice(1),
+				completedByUser:
+					trade.completedByReceivingUser ||
+					trade.completedByRequestingUser ||
+					false,
 			};
 
 			if (
@@ -158,7 +165,9 @@ class TradingService {
 			} else if (
 				!["completed", "declined", "cancelled"].includes(
 					hydratedTrade.status.value,
-				)
+				) ||
+				(hydratedTrade.status.value === "completed" &&
+					!hydratedTrade.completedByUser)
 			) {
 				trades.inProgress.push(hydratedTrade);
 			} else {
@@ -208,6 +217,7 @@ class TradingService {
 				.from(plants)
 				.where(
 					and(
+						isNull(plants.deletedAt),
 						eq(plants.userId, users.id),
 						or(
 							inArray(
@@ -278,7 +288,10 @@ class TradingService {
 			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
-			.leftJoin(plants, eq(plants.userId, users.id))
+			.leftJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
 			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
 			.leftJoin(species, eq(species.id, plants.speciesId))
 			.leftJoin(
@@ -516,9 +529,13 @@ class TradingService {
 			.select()
 			.from(plants)
 			.where(
-				inArray(
-					plants.id,
-					suggestion.suggestionPlants.map((sp) => sp.plantId),
+				and(
+					isNull(plants.deletedAt),
+
+					inArray(
+						plants.id,
+						suggestion.suggestionPlants.map((sp) => sp.plantId),
+					),
 				),
 			);
 
@@ -568,7 +585,11 @@ class TradingService {
 			.groupBy(users.id)
 			.innerJoin(
 				plants,
-				and(eq(plants.userId, users.id), eq(plants.speciesId, speciesId)),
+				and(
+					eq(plants.userId, users.id),
+					eq(plants.speciesId, speciesId),
+					isNull(plants.deletedAt),
+				),
 			)
 			.innerJoin(tradeablePlants, eq(plants.id, tradeablePlants.plantId));
 		const usersThatWantIt = await dbManager.db
@@ -602,7 +623,10 @@ class TradingService {
 					),
 				),
 			)
-			.innerJoin(plants, eq(plants.userId, users.id))
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
 			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
 			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
@@ -647,30 +671,6 @@ class TradingService {
 			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
-
-		// const usersThatAreATradeMatchResult = await dbManager.db
-		// 	.select({ id: users.id })
-		// 	.from(users)
-		// 	.where(
-		// 		and(
-		// 			inArray(
-		// 				users.id,
-		// 				usersThatHaveItAvailable.map((u) => u.id),
-		// 			),
-		// 			requireSomeInterests,
-		// 			not(eq(users.id, user.id)),
-		// 		),
-		// 	)
-		// 	.groupBy(users.id)
-		// 	.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
-		// 	.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
-		// 	.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
-
-		// const usersThatAreATradeMatch = usersThatAreATradeMatchResult
-		// 	.map((u) => {
-		// 		return usersThatHaveItAvailable.find((u2) => u2.id === u.id);
-		// 	})
-		// 	.filter((u) => !!u);
 
 		const { scientificPortions, name: fullName } =
 			await taxonomyService.getScientificallySplitName(speciesId);
@@ -717,6 +717,7 @@ class TradingService {
 				.from(plants)
 				.where(
 					and(
+						isNull(plants.deletedAt),
 						eq(plants.userId, users.id),
 						eq(plants.speciesId, speciesId),
 						or(
@@ -788,7 +789,10 @@ class TradingService {
 			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
-			.leftJoin(plants, eq(plants.userId, users.id))
+			.leftJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
 			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
 			.leftJoin(species, eq(species.id, plants.speciesId))
 			.leftJoin(
@@ -906,6 +910,148 @@ class TradingService {
 		]);
 	}
 
+	public async completeTrade(
+		tradeId: number,
+		user: TUser,
+	): Promise<"fully_completed" | "partially_completed"> {
+		const accepted = await dbManager.db.query.tradeStatusTypes.findFirst({
+			where: eq(tradeStatusTypes.value, "accepted"),
+		});
+		if (!accepted) {
+			throw new AppError("Status not found");
+		}
+		const trade = await dbManager.db.query.trades.findFirst({
+			where: and(
+				// eq(trades.statusId, accepted.id),
+				eq(trades.id, tradeId),
+				or(
+					eq(trades.receivingUserId, user.id),
+					eq(trades.requestingUserId, user.id),
+				),
+				or(
+					not(trades.completedByReceivingUser),
+					not(trades.completedByRequestingUser),
+				),
+			),
+			with: {
+				suggestions: {
+					orderBy: [desc(tradeSuggestions.createdAt)],
+					with: {
+						suggestionPlants: {
+							with: {
+								plant: true,
+							},
+						},
+					},
+					limit: 1,
+					where: isNotNull(tradeSuggestions.acceptedAt),
+				},
+			},
+		});
+		if (
+			!trade ||
+			!trade.suggestions.length ||
+			!trade.suggestions[0]?.suggestionPlants
+		) {
+			throw new AppError("Not found", 404);
+		}
+		const completed = await dbManager.db.query.tradeStatusTypes.findFirst({
+			where: eq(tradeStatusTypes.value, "completed"),
+		});
+		if (!completed) {
+			throw new AppError("Status not found");
+		}
+		// const update: {completedByRecevingUser?: boolean, completedByRequestingUser: boolean} = { [userColumn]: true };
+		const userColumn =
+			trade.receivingUserId === user.id
+				? ("completedByReceivingUser" as const)
+				: ("completedByRequestingUser" as const);
+		const updatedTrade = await dbManager.db.transaction(async (trx) => {
+			const [updatedTrade, ..._] = await trx
+				.update(trades)
+				.set({ [userColumn]: true })
+				.where(eq(trades.id, tradeId))
+				.returning();
+
+			if (!updatedTrade) {
+				throw new AppError("updated trade not returned");
+			}
+
+			await trx
+				.insert(tradeStatusChanges)
+				.values({ tradeId, statusId: completed.id });
+
+			await trx
+				.update(trades)
+				.set({ statusId: completed.id })
+				.where(eq(trades.id, tradeId));
+
+			const finalSuggestion = trade.suggestions[0];
+			if (!finalSuggestion) {
+				throw new AppError("suggestion missing");
+			}
+
+			const { requestingUserId, receivingUserId } = trade;
+			const inserts: InferInsertModel<typeof plants>[] = [];
+			console.log("suggestionPlants:", finalSuggestion);
+			for (const { plant } of finalSuggestion.suggestionPlants) {
+				if (plant.userId === user.id) {
+					continue;
+				}
+				const newUserId =
+					plant.userId === requestingUserId
+						? receivingUserId
+						: requestingUserId;
+				const plantArgs: InferInsertModel<typeof plants> = {
+					userId: newUserId,
+					speciesId: plant.speciesId,
+					type: plant.type,
+				};
+				inserts.push(plantArgs);
+			}
+
+			await trx.insert(plants).values(inserts);
+			console.log(inserts);
+			return updatedTrade;
+		});
+
+		if (
+			updatedTrade.completedByReceivingUser &&
+			updatedTrade.completedByRequestingUser
+		) {
+			return "fully_completed";
+		}
+		return "partially_completed";
+	}
+
+	public async cancelTrade(tradeId: number, user: TUser): Promise<void> {
+		const trade = await dbManager.db.query.trades.findFirst({
+			where: and(
+				eq(trades.id, tradeId),
+				or(
+					eq(trades.receivingUserId, user.id),
+					eq(trades.requestingUserId, user.id),
+				),
+			),
+		});
+		if (!trade) {
+			throw new AppError("Not found", 404);
+		}
+
+		const cancelledStatus = await dbManager.db.query.tradeStatusTypes.findFirst(
+			{ where: eq(tradeStatusTypes.value, "cancelled") },
+		);
+		if (!cancelledStatus) {
+			throw new AppError("Status not found", 404);
+		}
+		await dbManager.db.transaction(async (trx) => {
+			await trx
+				.insert(tradeStatusChanges)
+				.values({ tradeId, statusId: cancelledStatus.id });
+			await trx.update(trades).set({ statusId: cancelledStatus.id });
+		});
+	}
+
 	public async getTradeData(
 		tradeId: number,
 		user: TUser,
@@ -915,9 +1061,6 @@ class TradingService {
 			statusHistory: TradeStatusChange[];
 		}
 	> {
-		// TTrade & {
-		//
-		// }
 		const trade = await dbManager.db.query.trades.findFirst({
 			where: and(
 				eq(trades.id, tradeId),
@@ -935,7 +1078,7 @@ class TradingService {
 				},
 				statusType: true,
 				suggestions: {
-					orderBy: [desc(tradeSuggestions.createdAt)],
+					orderBy: [desc(tradeSuggestions.acceptedAt)],
 					with: {
 						suggestionPlants: true,
 					},
@@ -972,6 +1115,7 @@ class TradingService {
 				suggestionPlants: CollectedPlant[];
 			};
 		}
+		console.log(suggestions[0]?.suggestionPlants);
 		return { ...trade, suggestions };
 	}
 }
@@ -984,6 +1128,7 @@ interface Trade {
 	otherUserUsername: string;
 	currentSuggestion: TradeSuggestion;
 	suggestionHistory: TradeSuggestionHistory;
+	completedByUser: boolean;
 	createdAt: Date;
 }
 

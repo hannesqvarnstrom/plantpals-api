@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validateRequest } from "zod-express-middleware";
 import { requireJwt, requireUser } from "../middleware/jwt";
+import { validateOwnership } from "../middleware/ownership";
 import plantService from "../services/plant";
 import userService from "../services/user";
 import { postPlantSchema, putPlantSchema } from "./schemas";
@@ -64,6 +65,16 @@ plantsRouter.delete("/:plantId/tradeable", async (req, res, next) => {
 		const user = requireUser(req);
 		await plantService.makePlantUntradeable(Number(req.params.plantId), user);
 		return res.status(200).send();
+	} catch (e) {
+		return next(e);
+	}
+});
+
+plantsRouter.delete("/:plantId", validateOwnership, async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		await plantService.deletePlant(Number(req.params.plantId), user);
+		return res.status(201).send();
 	} catch (e) {
 		return next(e);
 	}

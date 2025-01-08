@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import dbManager from "../db";
 import {
 	families,
@@ -31,6 +31,7 @@ export interface CollectedPlant extends TSpecies {
 	createdAt: Date;
 	openForTrade: boolean;
 	collectedByUser: boolean;
+	userId?: number;
 }
 class PlantService {
 	model: PlantModel;
@@ -74,7 +75,7 @@ class PlantService {
 				tradeable: sql<boolean>`(${tradeablePlants.id}) IS NOT NULL`,
 			})
 			.from(plants)
-			.where(eq(plants.userId, user.id))
+			.where(and(eq(plants.userId, user.id), isNull(plants.deletedAt)))
 			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plantId));
 
 		if (!plant) {
@@ -106,7 +107,7 @@ class PlantService {
 				tradeId: tradeablePlants.id,
 			})
 			.from(plants)
-			.where(eq(plants.userId, user.id))
+			.where(and(eq(plants.userId, user.id), isNull(plants.deletedAt)))
 			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plantId));
 
 		if (!plant) {
@@ -128,7 +129,7 @@ class PlantService {
 	}
 
 	public async getCollectedPlant(
-		plant: TPlant,
+		plant: Omit<TPlant, "deletedAt">,
 		requestingUserId: number,
 	): Promise<CollectedPlant> {
 		// const species = await this.speciesModel.getById(plant.speciesId);
@@ -176,6 +177,7 @@ class PlantService {
 			createdAt: plant.createdAt,
 			type: plant.type,
 			collectedByUser: plant.userId === requestingUserId,
+			userId: plant.userId,
 		};
 	}
 
@@ -187,7 +189,13 @@ class PlantService {
 		const [plant, ..._] = await dbManager.db
 			.select()
 			.from(plants)
-			.where(and(eq(plants.speciesId, speciesId), eq(plants.userId, user.id)));
+			.where(
+				and(
+					eq(plants.speciesId, speciesId),
+					eq(plants.userId, user.id),
+					isNull(plants.deletedAt),
+				),
+			);
 
 		if (!plant) {
 			throw new AppError("plant does not exist for user", 404);
@@ -223,6 +231,7 @@ class PlantService {
 			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.where(
 				and(
+					isNull(plants.deletedAt),
 					inArray(
 						plants.speciesId,
 						requestingUserInterests.species.map(
@@ -279,11 +288,17 @@ class PlantService {
 		return returnArr;
 	}
 
-	public async getById(id: string | number): Promise<TPlant> {
-		const plant = await this.model.getById(Number(id), true);
-		return plant;
+	public async getById(
+		id: string | number,
+		throwOnMissing?: true,
+	): Promise<TPlant>;
+	public async getById(
+		id: string | number,
+		throwOnMissing: false,
+	): Promise<TPlant | undefined>;
+	public async getById(id: string | number, throwOnMissing = true) {
+		return this.model.getById(Number(id), throwOnMissing);
 	}
-
 	/**
 	 * @param args The payload to create a new plant
 	 * @returns the newly created plant
@@ -297,22 +312,23 @@ class PlantService {
 		const [available, ..._] = await dbManager.db
 			.select()
 			.from(tradeablePlants)
-			.where(eq(tradeablePlants.plantId, Number(plantId)));
+			.where(
+				and(
+					eq(tradeablePlants.plantId, Number(plantId)),
+					isNull(plants.deletedAt),
+				),
+			);
 		return !!available;
 	}
 
-	// public async updatePlant(
-	//     id: string,
-	//     plantUpdateArgs: PlantUpdateArgs
-	// ): Promise<TPlant> {
-	//     const newPlant = await this.model.update(Number(id), plantUpdateArgs);
-	//     return newPlant;
-	// }
+	public async deletePlant(plantId: number, user: TUser): Promise<void> {
+		await dbManager.db
+			.update(plants)
+			.set({ deletedAt: new Date() })
+			.where(and(eq(plants.id, plantId), eq(plants.userId, user.id)));
+	}
 }
-// // function fillWithDefaultValues(name: ShallowPlant['name']) {
-// //     const {name1a, name1b, name2a, name2b} = name
-// // }
-// }
+
 const plantService = new PlantService();
 export default plantService;
 export type PlantTypeCol =

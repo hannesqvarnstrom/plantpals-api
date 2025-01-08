@@ -112,6 +112,29 @@ tradingRouter.post(
 	},
 );
 
+tradingRouter.post("/:tradeId/complete", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const result = await tradingService.completeTrade(
+			Number(req.params.tradeId),
+			user,
+		);
+		console.log(result);
+		return res.status(201).send(result);
+	} catch (e) {
+		return next(e);
+	}
+});
+
+tradingRouter.post("/:tradeId/cancel", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		await tradingService.cancelTrade(Number(req.params.tradeId), user);
+		return res.status(201).send();
+	} catch (e) {
+		return next(e);
+	}
+});
 tradingRouter.get("/", async (req, res, next) => {
 	try {
 		const user = requireUser(req);
