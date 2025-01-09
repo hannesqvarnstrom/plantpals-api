@@ -993,7 +993,7 @@ class TradingService {
 
 			const { requestingUserId, receivingUserId } = trade;
 			const inserts: InferInsertModel<typeof plants>[] = [];
-			console.log("suggestionPlants:", finalSuggestion);
+
 			for (const { plant } of finalSuggestion.suggestionPlants) {
 				if (plant.userId === user.id) {
 					continue;
@@ -1011,7 +1011,7 @@ class TradingService {
 			}
 
 			await trx.insert(plants).values(inserts);
-			console.log(inserts);
+
 			return updatedTrade;
 		});
 
@@ -1078,7 +1078,7 @@ class TradingService {
 				},
 				statusType: true,
 				suggestions: {
-					orderBy: [desc(tradeSuggestions.acceptedAt)],
+					orderBy: [desc(tradeSuggestions.createdAt)],
 					with: {
 						suggestionPlants: true,
 					},
@@ -1093,7 +1093,7 @@ class TradingService {
 			suggestionPlants: CollectedPlant[];
 		})[] = [];
 
-		const i = 0;
+		let i = 0;
 		for (const suggestion of trade.suggestions) {
 			const hydratedPlants = await Promise.all(
 				suggestion.suggestionPlants.map(async (p) => {
@@ -1114,8 +1114,8 @@ class TradingService {
 			} as TradeSuggestion & {
 				suggestionPlants: CollectedPlant[];
 			};
+			i++;
 		}
-		console.log(suggestions[0]?.suggestionPlants);
 		return { ...trade, suggestions };
 	}
 }

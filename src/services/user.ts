@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import dbManager from "../db";
 import {
 	families,
@@ -90,7 +90,7 @@ class UserService {
 				type: plants.type,
 			})
 			.from(plants)
-			.where(eq(plants.userId, userId))
+			.where(and(eq(plants.userId, userId), isNull(plants.deletedAt)))
 			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id));
 		const rValue = await Promise.all(
 			p.map((innerP) =>
