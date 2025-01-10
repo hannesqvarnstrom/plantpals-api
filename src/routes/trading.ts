@@ -14,6 +14,7 @@ import { AppError } from "../utils/errors";
 import {
 	getMatchCheckSchema,
 	postMakeTradeSuggestionSchema,
+	postTradeCleanupSchema,
 	postTradeSchema,
 } from "./schemas";
 
@@ -125,6 +126,27 @@ tradingRouter.post("/:tradeId/complete", async (req, res, next) => {
 		return next(e);
 	}
 });
+
+tradingRouter.post(
+	"/:tradeId/complete/cleanup",
+	validateRequest({
+		body: postTradeCleanupSchema,
+	}),
+	async (req, res, next) => {
+		try {
+			const { plantIds } = req.body;
+			const user = requireUser(req);
+			const result = await tradingService.tradeCleanup(
+				Number(req.params.tradeId),
+				plantIds,
+				user,
+			);
+			return res.send(result);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
 
 tradingRouter.post("/:tradeId/cancel", async (req, res, next) => {
 	try {

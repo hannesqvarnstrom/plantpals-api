@@ -152,9 +152,12 @@ class TradingService {
 				createdAt: trade.createdAt,
 				suggestionHistory: suggestionHistory.slice(1),
 				completedByUser:
-					trade.completedByReceivingUser ||
-					trade.completedByRequestingUser ||
-					false,
+					!!(
+						trade.completedByReceivingUser && trade.receivingUserId === userId
+					) ||
+					!!(
+						trade.completedByRequestingUser && trade.requestingUserId === userId
+					),
 			};
 
 			if (
@@ -174,6 +177,32 @@ class TradingService {
 				trades.history.push(hydratedTrade);
 			}
 		}
+
+		for (const trade of [
+			...trades.inbox,
+			...trades.inProgress,
+			...trades.history,
+		]) {
+			trade.suggestionHistory.sort(
+				(a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+			);
+		}
+
+		trades.inbox.sort(
+			(a, b) =>
+				b.currentSuggestion.createdAt.getTime() -
+				a.currentSuggestion.createdAt.getTime(),
+		);
+		trades.inProgress.sort(
+			(a, b) =>
+				b.currentSuggestion.createdAt.getTime() -
+				a.currentSuggestion.createdAt.getTime(),
+		);
+		trades.history.sort(
+			(a, b) =>
+				b.currentSuggestion.createdAt.getTime() -
+				a.currentSuggestion.createdAt.getTime(),
+		);
 
 		return trades;
 	}
@@ -910,10 +939,7 @@ class TradingService {
 		]);
 	}
 
-	public async completeTrade(
-		tradeId: number,
-		user: TUser,
-	): Promise<"fully_completed" | "partially_completed"> {
+	public async completeTrade(tradeId: number, user: TUser): Promise<void> {
 		const accepted = await dbManager.db.query.tradeStatusTypes.findFirst({
 			where: eq(tradeStatusTypes.value, "accepted"),
 		});
@@ -922,7 +948,6 @@ class TradingService {
 		}
 		const trade = await dbManager.db.query.trades.findFirst({
 			where: and(
-				// eq(trades.statusId, accepted.id),
 				eq(trades.id, tradeId),
 				or(
 					eq(trades.receivingUserId, user.id),
@@ -961,22 +986,7 @@ class TradingService {
 		if (!completed) {
 			throw new AppError("Status not found");
 		}
-		// const update: {completedByRecevingUser?: boolean, completedByRequestingUser: boolean} = { [userColumn]: true };
-		const userColumn =
-			trade.receivingUserId === user.id
-				? ("completedByReceivingUser" as const)
-				: ("completedByRequestingUser" as const);
-		const updatedTrade = await dbManager.db.transaction(async (trx) => {
-			const [updatedTrade, ..._] = await trx
-				.update(trades)
-				.set({ [userColumn]: true })
-				.where(eq(trades.id, tradeId))
-				.returning();
-
-			if (!updatedTrade) {
-				throw new AppError("updated trade not returned");
-			}
-
+		await dbManager.db.transaction(async (trx) => {
 			await trx
 				.insert(tradeStatusChanges)
 				.values({ tradeId, statusId: completed.id });
@@ -995,9 +1005,6 @@ class TradingService {
 			const inserts: InferInsertModel<typeof plants>[] = [];
 
 			for (const { plant } of finalSuggestion.suggestionPlants) {
-				if (plant.userId === user.id) {
-					continue;
-				}
 				const newUserId =
 					plant.userId === requestingUserId
 						? receivingUserId
@@ -1011,17 +1018,7 @@ class TradingService {
 			}
 
 			await trx.insert(plants).values(inserts);
-
-			return updatedTrade;
 		});
-
-		if (
-			updatedTrade.completedByReceivingUser &&
-			updatedTrade.completedByRequestingUser
-		) {
-			return "fully_completed";
-		}
-		return "partially_completed";
 	}
 
 	public async cancelTrade(tradeId: number, user: TUser): Promise<void> {
@@ -1117,6 +1114,35 @@ class TradingService {
 			i++;
 		}
 		return { ...trade, suggestions };
+	}
+
+	public async tradeCleanup(
+		tradeId: number,
+		plantIds: number[],
+		user: TUser,
+	): Promise<void> {
+		await dbManager.db.transaction(async (trx) => {
+			const trade = await this.tradeModel.getById(tradeId, true);
+			if (![trade.requestingUserId, trade.receivingUserId].includes(user.id)) {
+				throw new AppError("Not found", 404);
+			}
+			if (plantIds.length) {
+				await Promise.all(
+					plantIds.map((id) => {
+						return plantService.deletePlant(id, user);
+					}),
+				);
+			}
+
+			const col =
+				trade.receivingUserId === user.id
+					? "completedByReceivingUser"
+					: "completedByRequestingUser";
+			await dbManager.db
+				.update(trades)
+				.set({ [col]: true })
+				.where(eq(trades.id, tradeId));
+		});
 	}
 }
 

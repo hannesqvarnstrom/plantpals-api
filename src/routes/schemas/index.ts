@@ -247,6 +247,10 @@ export const postMakeTradeSuggestionSchema = z.object({
 	objectPlantIds: z.array(z.number()),
 });
 
+export const postTradeCleanupSchema = z.object({
+	plantIds: z.array(z.number()),
+});
+
 export const postSpeciesSubmissionSchema = z.object({
 	closestTaxonomicParent: z.number().optional(),
 	closestTaxonomicParentType: z.enum(["family", "genus", "species"]).optional(),
