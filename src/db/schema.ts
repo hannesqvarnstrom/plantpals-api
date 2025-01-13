@@ -310,6 +310,9 @@ export const tradeRelations = relations(trades, (helpers) => ({
 	statusHistory: helpers.many(tradeStatusChanges, {
 		relationName: "statusHistory",
 	}),
+	messages: helpers.many(tradeMessages, {
+		relationName: "messages",
+	}),
 }));
 
 export const tradeSuggestions = pgTable("trade_suggestions", {
@@ -328,6 +331,50 @@ export const tradeSuggestions = pgTable("trade_suggestions", {
 	respondedAt: timestamp("responded_at"),
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const tradeMessageType = pgEnum("trade_message_type", [
+	"system",
+	"text",
+]);
+
+export const tradeMessages = pgTable("trade_messages", {
+	id: serial("id").primaryKey().notNull(),
+	tradeId: integer("trade_id")
+		.references(() => trades.id)
+		.notNull(),
+	senderUserId: integer("sender_user_id")
+		.references(() => users.id)
+		.notNull(),
+	recipientUserId: integer("recipient_user_id")
+		.references(() => users.id)
+		.notNull(),
+	suggestionId: integer("suggestion_id").references(() => tradeSuggestions.id),
+	content: varchar("content").notNull(),
+	type: tradeMessageType("type").default("text"),
+	createdAt: timestamp("created_at").defaultNow().notNull(),
+	readAt: timestamp("read_at"),
+	deletedAt: timestamp("deleted_at"),
+});
+
+export const tradeMessageRelations = relations(tradeMessages, (helpers) => ({
+	trade: helpers.one(trades, {
+		fields: [tradeMessages.tradeId],
+		references: [trades.id],
+		relationName: "messages",
+	}),
+	sender: helpers.one(users, {
+		fields: [tradeMessages.senderUserId],
+		references: [users.id],
+	}),
+	recipient: helpers.one(users, {
+		fields: [tradeMessages.recipientUserId],
+		references: [users.id],
+	}),
+	suggestion: helpers.one(tradeSuggestions, {
+		fields: [tradeMessages.suggestionId],
+		references: [tradeSuggestions.id],
+	}),
+}));
 
 export const tradeSuggestionPlants = pgTable("trade_suggestion_plants", {
 	id: serial("id").primaryKey().notNull(),
@@ -394,4 +441,6 @@ export const Schema = {
 	generaRelations,
 	tradeStatusChangeRelations,
 	tradeStatusChanges,
+	tradeMessages,
+	tradeMessageRelations,
 };

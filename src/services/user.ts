@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import dbManager from "../db";
 import {
 	families,
@@ -6,8 +6,8 @@ import {
 	genera,
 	genusInterests,
 	plants,
-	species,
 	speciesInterests,
+	tradeMessages,
 	tradeablePlants,
 } from "../db/schema";
 import { TFamily } from "../models/family";
@@ -153,6 +153,23 @@ class UserService {
 				}))
 				.sort((a, b) => a.fullName.localeCompare(b.fullName)),
 		};
+	}
+
+	public async getTradeMessages(userId: number) {
+		const messages = await dbManager.db.query.tradeMessages.findMany({
+			where: and(
+				or(
+					eq(tradeMessages.recipientUserId, userId),
+					eq(tradeMessages.senderUserId, userId),
+				),
+				isNull(tradeMessages.deletedAt),
+			),
+			with: {
+				suggestion: true,
+				sender: true,
+			},
+		});
+		return messages;
 	}
 }
 

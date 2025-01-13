@@ -16,6 +16,7 @@ import {
 	postMakeTradeSuggestionSchema,
 	postTradeCleanupSchema,
 	postTradeSchema,
+	postTradingMessageSchema,
 } from "./schemas";
 
 const tradingRouter = Router();
@@ -166,6 +167,55 @@ tradingRouter.get("/", async (req, res, next) => {
 		return next(e);
 	}
 });
+tradingRouter.get("/messages", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const messages = await userService.getTradeMessages(user.id);
+		return res.send(messages);
+	} catch (e) {
+		return next(e);
+	}
+});
+tradingRouter.post(
+	"/:tradeId/messages",
+	validateRequest({ body: postTradingMessageSchema }),
+	async (req, res, next) => {
+		try {
+			const { content, suggestionId } = req.body;
+			const user = requireUser(req);
+			const newMessage = await tradingService.sendTradeMessage(
+				Number(req.params.tradeId),
+				content,
+				user,
+				suggestionId,
+			);
+
+			return res.send(newMessage);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
+
+tradingRouter.post(
+	"/:tradeId/messages/:messageId/read",
+	async (req, res, next) => {
+		try {
+			const { tradeId, messageId } = req.params;
+
+			const user = requireUser(req);
+			await tradingService.readMessage(
+				Number(messageId),
+				Number(tradeId),
+				user,
+			);
+			console.log("worked!");
+			return res.send().status(201);
+		} catch (e) {
+			return next(e);
+		}
+	},
+);
 
 tradingRouter.get("/match", async (req, res, next) => {
 	try {

@@ -21,6 +21,7 @@ import {
 	plants,
 	species,
 	speciesInterests,
+	tradeMessages,
 	tradeStatusChanges,
 	tradeStatusTypes,
 	tradeSuggestionPlants,
@@ -30,6 +31,7 @@ import {
 	users,
 } from "../db/schema";
 import TradeModel, { type TTrade } from "../models/trade";
+import type { TTradeMessage } from "../models/trade-message";
 import type { TTradeStatusType } from "../models/trade-status-type";
 import TradeSuggestionModel, {
 	type TTradeSuggestion,
@@ -82,7 +84,7 @@ class TradingService {
 		return trade.statusType;
 	}
 
-	public async getTrades(userId: number): Promise<Trades | undefined> {
+	public async getTrades(userId: number): Promise<Trades> {
 		const userTrades = await dbManager.db.query.users
 			.findFirst({
 				with: {
@@ -102,7 +104,7 @@ class TradingService {
 			!userTrades ||
 			!(userTrades.tradesRequestedByUser && userTrades.tradesReceivedByUser)
 		) {
-			return;
+			return { inbox: [], inProgress: [], history: [] };
 		}
 		for (const trade of [
 			...userTrades.tradesRequestedByUser,
@@ -532,6 +534,27 @@ class TradingService {
 					}),
 			),
 		);
+	}
+
+	private async updateUserTradeMessageNotifications(userId: number) {
+		await this.notificationsService.publishToUser(String(userId), {
+			type: "TRADES_MESSAGES_UPDATE",
+			payload: await this.getTradeMessagesForUser(userId),
+		});
+	}
+
+	public async getTradeMessagesForUser(userId: number) {
+		const messages = await dbManager.db.query.tradeMessages.findMany({
+			where: and(
+				eq(tradeMessages.recipientUserId, userId),
+				isNull(tradeMessages.deletedAt),
+			),
+			with: {
+				suggestion: true,
+				sender: true,
+			},
+		});
+		return messages;
 	}
 
 	public async getSuggestion(
@@ -1143,6 +1166,107 @@ class TradingService {
 				.set({ [col]: true })
 				.where(eq(trades.id, tradeId));
 		});
+	}
+
+	public async sendTradeMessage(
+		tradeId: number,
+		content: string,
+		senderUser: TUser,
+		suggestionId?: number,
+	): Promise<TTradeMessage> {
+		/**
+		 * @todo
+		 * - how to handle syncing client to server
+		 * (websockets...? polling...?) i think websockets is almost the best way to do it honestly?
+		 *
+		 *
+		 */
+		const trade = await dbManager.db.query.trades.findFirst({
+			where: and(
+				eq(trades.id, tradeId),
+				or(
+					eq(trades.receivingUserId, senderUser.id),
+					eq(trades.requestingUserId, senderUser.id),
+				),
+			),
+			with: {
+				suggestions: true,
+			},
+		});
+
+		if (!trade) {
+			throw new AppError("Not found", 404);
+		}
+
+		if (suggestionId) {
+			const suggestion = trade.suggestions.find(
+				(suggestion) => suggestion.id === suggestionId,
+			);
+			if (!suggestion) {
+				throw new AppError("Trade suggestion not found", 404);
+			}
+		}
+
+		const recipientUserId =
+			trade.receivingUserId === senderUser.id
+				? trade.requestingUserId
+				: trade.receivingUserId;
+		const [message, ..._] = await dbManager.db
+			.insert(tradeMessages)
+			.values({
+				recipientUserId,
+				senderUserId: senderUser.id,
+				content,
+				type: "text",
+				tradeId,
+				suggestionId,
+			})
+			.returning();
+
+		if (!message) {
+			throw new AppError("Unknown error occured while creating message", 500);
+		}
+
+		await this.updateUserTradeMessageNotifications(message.recipientUserId);
+		return message;
+	}
+
+	public async readMessage(
+		messageId: number,
+		tradeId: number,
+		user: TUser,
+	): Promise<void> {
+		const trade = await dbManager.db.query.trades.findFirst({
+			where: and(
+				eq(trades.id, tradeId),
+				or(
+					eq(trades.receivingUserId, user.id),
+					eq(trades.requestingUserId, user.id),
+				),
+			),
+			with: {
+				messages: {
+					where: and(
+						eq(tradeMessages.id, messageId),
+						eq(tradeMessages.recipientUserId, user.id),
+					),
+				},
+			},
+		});
+
+		if (!trade) {
+			throw new AppError("Trade not found", 404);
+		}
+
+		const [message] = trade.messages;
+		if (!message) {
+			throw new AppError("Message not found", 404);
+		}
+
+		await dbManager.db
+			.update(tradeMessages)
+			.set({ readAt: new Date() })
+			.where(eq(tradeMessages.id, messageId));
 	}
 }
 

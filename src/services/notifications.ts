@@ -2,12 +2,28 @@ import type { ServerResponse } from "node:http";
 import type { Response } from "express";
 import Redis from "ioredis";
 import RedisMock from "ioredis-mock";
+import type { TTradeMessage } from "../models/trade-message";
+import type { TTradeSuggestion } from "../models/trade-suggestion";
+import type { TUser } from "../models/user";
 import { REDIS_CONFIG } from "../redis";
 import envVars from "../utils/environment";
 import type { TradeMatch, Trades } from "./trading";
-export type NotificationPayload = {
-	type: "MATCHES_UPDATE" | "TRADES_UPDATE";
-	payload: TradeMatch[] | Trades | undefined;
+export type NotificationTypes =
+	| "MATCHES_UPDATE"
+	| "TRADES_UPDATE"
+	| "TRADES_MESSAGES_UPDATE";
+export type NotificationPayload<T extends NotificationTypes> = {
+	type: T;
+	payload: T extends "MATCHES_UPDATE"
+		? TradeMatch[]
+		: T extends "TRADES_UPDATE"
+			? Trades
+			: T extends "TRADES_MESSAGES_UPDATE"
+				? (TTradeMessage & {
+						suggestion: TTradeSuggestion | null;
+						sender: TUser;
+					})[]
+				: undefined;
 };
 
 export class NotificationsService {
@@ -95,12 +111,17 @@ export class NotificationsService {
 		return NotificationsService.instance;
 	}
 
-	async publishToUser(userId: string, notification: NotificationPayload) {
+	async publishToUser<S extends NotificationTypes>(
+		userId: string,
+		notification: NotificationPayload<S>,
+	) {
 		const message = JSON.stringify({ userId, ...notification });
 		await this.publisher.publish("trade-notifications", message);
 	}
 
-	async publish(notification: NotificationPayload) {
+	async publish<S extends NotificationTypes>(
+		notification: NotificationPayload<S>,
+	) {
 		await this.publisher.publish(
 			"trade-notifications",
 			JSON.stringify(notification),
