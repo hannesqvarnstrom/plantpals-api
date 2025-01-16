@@ -64,6 +64,73 @@ class TaxonomyService {
 		this.speciesSubmissionModel = new UserSpeciesSubmissionModel();
 	}
 
+	public async searchTaxons({
+		q,
+		page,
+		familyId,
+		genusId,
+		speciesId,
+		onlyAccepted,
+		excludeRank,
+	}: SearchArguments): Promise<TaxonomySearchResult[]> {
+		const query = `%${q}%`;
+		const familyQuery = await dbManager.db
+			.selectDistinctOn([families.id], {
+				taxonId: families.id,
+				taxonType: sql<"family">`'family'`.as("taxon_type"),
+				name: families.name,
+			})
+			.from(families)
+			.where(ilike(families.name, query))
+			.limit(3);
+
+		const _genusQuery = dbManager.db
+			.selectDistinctOn([genera.id], {
+				taxonId: genera.id,
+				taxonType: sql<"genus">`'genus'`.as("taxon_type"),
+				name: genera.name,
+			})
+			.from(genera)
+			.where(ilike(genera.name, query))
+			.limit(3);
+
+		const genusQuery = await _genusQuery.execute();
+
+		const speciesQuery = await dbManager.db
+			.selectDistinctOn([species.id], {
+				taxonId: species.id,
+				taxonType: sql<"species">`'species'`.as("taxon_type"),
+				name: species.name,
+			})
+			.from(species)
+			.where(
+				excludeRank
+					? and(ilike(species.name, query), not(eq(species.rank, excludeRank)))
+					: ilike(species.name, query) || ilike(species.vernacularNames, query),
+			)
+			.limit(10)
+			.offset(page ? page * 30 : 0);
+
+		return Promise.all(
+			[...familyQuery, ...genusQuery, ...speciesQuery].map(async (taxon) => {
+				const speciesName =
+					taxon.taxonType === "species"
+						? await this.getScientificallySplitName(taxon.taxonId)
+						: null;
+				const name =
+					taxon.taxonType === "species" && speciesName
+						? {
+								fullName: speciesName.name,
+								scientificPortions: speciesName.scientificPortions,
+							}
+						: taxon.taxonType === "genus"
+							? { fullName: taxon.name, scientificPortions: [taxon.name] }
+							: { fullName: taxon.name, scientificPortions: [] };
+				return { ...taxon, name };
+			}),
+		);
+	}
+
 	public async search({
 		q,
 		page,
@@ -84,13 +151,6 @@ class TaxonomyService {
 			)
 			.limit(30)
 			.offset(page ? page * 30 : 0);
-		// .query.species.findMany({
-		//     where: (species) => ilike(species.name, query) || ilike(species.vernacularNames, query)
-		// })
-
-		// if (familyId) {
-		//     speciesQuery
-		// }
 
 		return speciesQuery;
 	}
@@ -1300,4 +1360,9 @@ function getCrossParentName(species?: TSpecies): string {
 		);
 	}
 	return name;
+}
+export interface TaxonomySearchResult {
+	taxonId: number;
+	taxonType: "species" | "genus" | "family";
+	name: { fullName: string; scientificPortions: string[] };
 }

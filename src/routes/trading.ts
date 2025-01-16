@@ -241,9 +241,8 @@ tradingRouter.get(
 				req.user,
 				Number(objectUserId),
 			);
-			setTimeout(() => {
-				return res.send(plantsForTradeMatch);
-			}, 1000);
+
+			return res.send(plantsForTradeMatch);
 		} catch (e) {
 			return next(e);
 		}
@@ -301,6 +300,33 @@ tradingRouter.get("/species/:speciesId", async (req, res, next) => {
 		const user = requireUser(req);
 		const tradeMatches = await tradingService.getTradeDataForSpeciesForUser(
 			Number(req.params.speciesId),
+			user,
+		);
+
+		return res.send(tradeMatches);
+	} catch (e) {
+		return next(e);
+	}
+});
+
+tradingRouter.get("/genus/:genusId", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const tradeMatches = await tradingService.getTradeDataForGenusForUser(
+			Number(req.params.genusId),
+			user,
+		);
+		return res.send(tradeMatches);
+	} catch (e) {
+		return next(e);
+	}
+});
+
+tradingRouter.get("/family/:familyId", async (req, res, next) => {
+	try {
+		const user = requireUser(req);
+		const tradeMatches = await tradingService.getTradeDataForFamilyForUser(
+			Number(req.params.familyId),
 			user,
 		);
 		return res.send(tradeMatches);

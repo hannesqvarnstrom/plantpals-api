@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import dbManager from "../db";
 import {
 	families,
@@ -304,6 +304,25 @@ class PlantService {
 	 * @returns the newly created plant
 	 */
 	public async createPlant(args: TPlantCreateArgs): Promise<TPlant> {
+		const [existingWildcardPlantForUser, ..._] = await dbManager.db
+			.select({ id: plants.id })
+			.from(plants)
+			.where(
+				and(
+					eq(plants.type, "none"),
+					eq(plants.userId, args.userId),
+					eq(plants.speciesId, args.speciesId),
+					isNull(plants.deletedAt),
+				),
+			);
+
+		if (existingWildcardPlantForUser) {
+			await dbManager.db
+				.update(plants)
+				.set({ deletedAt: new Date() })
+				.where(eq(plants.id, existingWildcardPlantForUser.id));
+		}
+
 		const newPlant = await this.model.create(args);
 		return newPlant;
 	}

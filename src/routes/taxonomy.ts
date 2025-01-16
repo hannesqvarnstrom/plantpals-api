@@ -20,6 +20,19 @@ import {
 
 const taxonomyRouter = Router();
 
+taxonomyRouter.get("/search", async (req, res, next) => {
+	try {
+		const { query } = req.query;
+		if (!query || typeof query !== "string") {
+			throw new AppError("Query is required");
+		}
+		const searchResults = await taxonomyService.searchTaxons({ q: query });
+		return res.send(searchResults);
+	} catch (e) {
+		return next(e);
+	}
+});
+
 taxonomyRouter.get(
 	"/species/search",
 	validateRequest<typeof speciesSearchSchema>({ query: speciesSearchSchema }),
@@ -126,7 +139,14 @@ taxonomyRouter.get("/species/:speciesId", async (req, res, next) => {
 		if (!spec) {
 			throw new AppError("Species not found");
 		}
-		return res.send({ name: spec.name, id: spec.id, type: "species" });
+		const { scientificPortions } =
+			await taxonomyService.getScientificallySplitName(spec.id);
+		return res.send({
+			name: spec.name,
+			id: spec.id,
+			type: "species",
+			scientificPortions,
+		});
 	} catch (e) {
 		return next(e);
 	}

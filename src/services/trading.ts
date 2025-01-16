@@ -15,7 +15,9 @@ import {
 } from "drizzle-orm";
 import dbManager from "../db";
 import {
+	families,
 	familyInterests,
+	genera,
 	genusInterests,
 	plantTypeEnum,
 	plants,
@@ -30,6 +32,7 @@ import {
 	trades,
 	users,
 } from "../db/schema";
+import SpeciesModel from "../models/species";
 import TradeModel, { type TTrade } from "../models/trade";
 import type { TTradeMessage } from "../models/trade-message";
 import type { TTradeStatusType } from "../models/trade-status-type";
@@ -62,12 +65,15 @@ class TradingService {
 	tradeSuggestionModel: TradeSuggestionModel;
 	tradeSuggestionPlantModel: TradeSuggestionPlantModel;
 	notificationsService: NotificationsService;
+
+	speciesModel: SpeciesModel;
 	constructor() {
 		this.tradeModel = new TradeModel();
 		this.tradeSuggestionModel = new TradeSuggestionModel();
 		this.tradeSuggestionPlantModel = new TradeSuggestionPlantModel();
 		this.userModel = new UserModel();
 		this.notificationsService = NotificationsService.getInstance();
+		this.speciesModel = new SpeciesModel();
 	}
 
 	public async checkStatus(tradeId: number): Promise<TTradeStatusType> {
@@ -242,14 +248,23 @@ class TradingService {
 				userPlants.map((plant) => plant.familyId),
 			),
 		);
-		const requireSomeMatchingPlant = exists(
+
+		// maybe this as a CTE?
+		// like, user interest plants?
+		// my thinking is this will be very unperformant.
+		// since the exists is kinda nuts.
+
+		// for each user, do this query.
+		// i think it might be better to execute this ONCE, like user interest plants or something
+		// then join that table in on the users query, instead
+		const userInterestPlants = dbManager.db.$with("user_interest_plants").as(
 			dbManager.db
-				.select({ id: plants.id })
+				.select({ id: plants.id, userId: plants.userId })
 				.from(plants)
 				.where(
 					and(
 						isNull(plants.deletedAt),
-						eq(plants.userId, users.id),
+						// eq(plants.userId, users.id),
 						or(
 							inArray(
 								species.id,
@@ -267,9 +282,37 @@ class TradingService {
 					),
 				)
 				.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
-				.innerJoin(species, eq(species.id, plants.speciesId))
-				.limit(1),
+				.innerJoin(species, eq(species.id, plants.speciesId)),
 		);
+
+		// const requireSomeMatchingPlant = exists(
+		// 	dbManager.db
+		// 		.select({ id: plants.id })
+		// 		.from(plants)
+		// 		.where(
+		// 			and(
+		// 				isNull(plants.deletedAt),
+		// 				eq(plants.userId, users.id),
+		// 				or(
+		// 					inArray(
+		// 						species.id,
+		// 						userInterests.species.map((s) => s.speciesId),
+		// 					),
+		// 					inArray(
+		// 						species.genusId,
+		// 						userInterests.genus.map((s) => s.genusId),
+		// 					),
+		// 					inArray(
+		// 						species.familyId,
+		// 						userInterests.family.map((s) => s.familyId),
+		// 					),
+		// 				),
+		// 			),
+		// 		)
+		// 		.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+		// 		.innerJoin(species, eq(species.id, plants.speciesId))
+		// 		.limit(1),
+		// );
 		const excludeStatuses = await dbManager.db
 			.select({ id: tradeStatusTypes.id })
 			.from(tradeStatusTypes)
@@ -283,6 +326,7 @@ class TradingService {
 			);
 
 		const usersQuery = dbManager.db
+			.with(userInterestPlants)
 			.select({
 				userId: users.id,
 				username: users.username,
@@ -309,13 +353,8 @@ class TradingService {
 				tradeInProgress: countDistinct(trades.id),
 			})
 			.from(users)
-			.where(
-				and(
-					requireSomeInterests,
-					requireSomeMatchingPlant,
-					not(eq(users.id, user.id)),
-				),
-			)
+			.where(and(requireSomeInterests, not(eq(users.id, user.id))))
+			.innerJoin(userInterestPlants, eq(userInterestPlants.userId, users.id))
 			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
@@ -598,10 +637,299 @@ class TradingService {
 		);
 	}
 
+	public async getTradeDataForFamilyForUser(
+		familyId: number,
+		user: TUser,
+	): Promise<TaxonTradeInfo> {
+		const userPlants = await plantService.getUserCollection(user.id);
+		const plantSpecies = await Promise.all(
+			userPlants.map((plant) =>
+				this.speciesModel.getById(plant.speciesId, true),
+			),
+		);
+		const userOwnsSpecies = plantSpecies.some(
+			(spec) => spec.familyId === familyId,
+		);
+
+		const userInterests = await userService.getInterests(user.id);
+		const family = await dbManager.db.query.families.findFirst({
+			where: eq(families.id, familyId),
+		});
+
+		if (!family) {
+			throw new AppError("Unable to find genus");
+		}
+
+		const usersThatHaveItAvailable = await dbManager.db
+			.selectDistinctOn([users.id], {
+				id: users.id,
+				username: users.username,
+				plantTypesAvailable: sql<
+					PlantTypeCol[] | null
+				>`CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+					array_to_json(
+						array_agg(
+							distinct plants.type
+						)
+					) 
+				ELSE
+					null
+				END`.as("plant_types_available"),
+			})
+			.from(users)
+			.groupBy(users.id)
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
+			.innerJoin(tradeablePlants, eq(plants.id, tradeablePlants.plantId))
+			.innerJoin(
+				species,
+				and(eq(species.id, plants.speciesId), eq(species.familyId, familyId)),
+			);
+
+		const usersThatWantIt = await dbManager.db
+			.selectDistinctOn([users.id], {
+				id: users.id,
+				username: users.username,
+				tradeablePlantsCount: countDistinct(tradeablePlants.plantId),
+			})
+			.from(users)
+			.where(
+				and(
+					not(eq(users.id, user.id)),
+					or(
+						eq(speciesInterests.speciesId, species.id),
+						eq(genusInterests.genusId, species.genusId),
+						eq(familyInterests.familyId, familyId),
+					),
+					// not(
+					// 	exists(
+					// 		dbManager.db
+					// 			.select({ id: plants.id })
+					// 			.from(plants)
+					// 			.where(
+					// 				and(
+					// 					eq(plants.userId, users.id),
+					// 					eq(plants.speciesId, speciesId),
+					// 				),
+					// 			)
+					// 			.limit(1),
+					// 	),
+					// ),
+				),
+			)
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
+			.innerJoin(
+				species,
+				and(eq(species.id, plants.speciesId), eq(species.familyId, familyId)),
+			)
+			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
+			.groupBy(users.id);
+
+		const recommendedTradeUsersResult = userOwnsSpecies
+			? usersThatWantIt
+			: usersThatHaveItAvailable;
+
+		const requireSomeInterests = or(
+			inArray(
+				speciesInterests.speciesId,
+				userPlants.map((plant) => plant.speciesId),
+			),
+			inArray(
+				genusInterests.genusId,
+				userPlants.map((plant) => plant.genusId),
+			),
+			inArray(
+				familyInterests.familyId,
+				userPlants.map((plant) => plant.familyId),
+			),
+		);
+
+		const recommendedTradeUsers = await dbManager.db
+			.select({
+				id: users.id,
+
+				// select matching interest to taxon. so we have matchingFamilyInterests, matchingGenusInterests, matchingSpeciesInterests as select columns here
+			})
+			.from(users)
+			.where(
+				and(
+					inArray(
+						users.id,
+						recommendedTradeUsersResult.map((u) => u.id),
+					),
+					requireSomeInterests,
+				),
+			)
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
+
+		// const { scientificPortions, name: fullName } =
+		// 	await taxonomyService.getScientificallySplitName(speciesId);
+		return {
+			recommendedTradeUserIds: recommendedTradeUsers.map((u) => u.id),
+			usersThatHaveItAvailable,
+			usersThatWantIt,
+			name: { fullName: family.name, scientificPortions: [] },
+		};
+	}
+
+	public async getTradeDataForGenusForUser(
+		genusId: number,
+		user: TUser,
+	): Promise<TaxonTradeInfo> {
+		const userPlants = await plantService.getUserCollection(user.id);
+		const plantSpecies = await Promise.all(
+			userPlants.map((plant) =>
+				this.speciesModel.getById(plant.speciesId, true),
+			),
+		);
+		const userOwnsSpecies = plantSpecies.some(
+			(spec) => spec.genusId === genusId,
+		);
+
+		const userInterests = await userService.getInterests(user.id);
+		const genus = await dbManager.db.query.genera.findFirst({
+			where: eq(genera.id, genusId),
+		});
+
+		if (!genus) {
+			throw new AppError("Unable to find genus");
+		}
+
+		const usersThatHaveItAvailable = await dbManager.db
+			.selectDistinctOn([users.id], {
+				id: users.id,
+				username: users.username,
+				plantTypesAvailable: sql<
+					PlantTypeCol[] | null
+				>`CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+					array_to_json(
+						array_agg(
+							distinct plants.type
+						)
+					) 
+				ELSE
+					null
+				END`.as("plant_types_available"),
+			})
+			.from(users)
+			.groupBy(users.id)
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
+			.innerJoin(tradeablePlants, eq(plants.id, tradeablePlants.plantId))
+			.innerJoin(
+				species,
+				and(eq(species.id, plants.speciesId), eq(species.genusId, genusId)),
+			);
+
+		const usersThatWantIt = await dbManager.db
+			.selectDistinctOn([users.id], {
+				id: users.id,
+				username: users.username,
+				tradeablePlantsCount: countDistinct(tradeablePlants.plantId),
+			})
+			.from(users)
+			.where(
+				and(
+					not(eq(users.id, user.id)),
+					or(
+						eq(genusInterests.genusId, genusId),
+						eq(familyInterests.familyId, genus.familyId),
+					),
+					// not(
+					// 	exists(
+					// 		dbManager.db
+					// 			.select({ id: plants.id })
+					// 			.from(plants)
+					// 			.where(
+					// 				and(
+					// 					eq(plants.userId, users.id),
+					// 					eq(plants.speciesId, speciesId),
+					// 				),
+					// 			)
+					// 			.limit(1),
+					// 	),
+					// ),
+				),
+			)
+			.innerJoin(
+				plants,
+				and(eq(plants.userId, users.id), isNull(plants.deletedAt)),
+			)
+			// .innerJoin(
+			// 	species,
+			// 	and(eq(species.id, plants.speciesId), eq(species.genusId, genusId)),
+			// )
+			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
+			.groupBy(users.id);
+
+		const recommendedTradeUsersResult = userOwnsSpecies
+			? usersThatWantIt
+			: usersThatHaveItAvailable;
+
+		const requireSomeInterests = or(
+			inArray(
+				speciesInterests.speciesId,
+				userPlants.map((plant) => plant.speciesId),
+			),
+			inArray(
+				genusInterests.genusId,
+				userPlants.map((plant) => plant.genusId),
+			),
+			inArray(
+				familyInterests.familyId,
+				userPlants.map((plant) => plant.familyId),
+			),
+		);
+
+		const recommendedTradeUsers = await dbManager.db
+			.select({
+				id: users.id,
+
+				// select matching interest to taxon. so we have matchingFamilyInterests, matchingGenusInterests, matchingSpeciesInterests as select columns here
+			})
+			.from(users)
+			.where(
+				and(
+					inArray(
+						users.id,
+						recommendedTradeUsersResult.map((u) => u.id),
+					),
+					requireSomeInterests,
+				),
+			)
+			.leftJoin(speciesInterests, eq(speciesInterests.userId, users.id))
+			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
+			.leftJoin(familyInterests, eq(familyInterests.userId, users.id));
+
+		// const { scientificPortions, name: fullName } =
+		// 	await taxonomyService.getScientificallySplitName(speciesId);
+		return {
+			recommendedTradeUserIds: recommendedTradeUsers.map((u) => u.id),
+			usersThatHaveItAvailable,
+			usersThatWantIt,
+			name: { fullName: genus.name, scientificPortions: [genus.name] },
+		};
+	}
+
 	public async getTradeDataForSpeciesForUser(
 		speciesId: number,
 		user: TUser,
-	): Promise<unknown> {
+	): Promise<TaxonTradeInfo> {
 		// maybe not even needed..
 		const userPlants = await plantService.getUserCollection(user.id);
 		const userOwnsSpecies = userPlants.some(
@@ -1317,4 +1645,19 @@ export interface TradeStatusChange {
 	id: number;
 	changedAt: Date;
 	statusType: TradeStatus;
+}
+
+export interface TaxonTradeInfo {
+	recommendedTradeUserIds: number[];
+	usersThatHaveItAvailable: {
+		id: number;
+		username: string | null;
+		plantTypesAvailable: PlantTypeCol[] | null;
+	}[];
+	usersThatWantIt: {
+		id: number;
+		username: string | null;
+		tradeablePlantsCount: number;
+	}[];
+	name: { fullName: string; scientificPortions: string[] };
 }
