@@ -85,7 +85,7 @@ export const updateMeSchema = z
 		const issues: z.IssueData[] = [];
 		// const { oldPassword, password, passwordConfirmation } = body
 
-		if (!password || !passwordConfirmation) {
+		if (password && !passwordConfirmation) {
 			issues.push({
 				code: "custom",
 				message: "Missing new replacement password",
