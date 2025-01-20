@@ -34,8 +34,22 @@ export class NotificationsService {
 	protected userConnections: Map<string, Set<Response>> = new Map();
 
 	constructor(publisher?: Redis, subscriber?: Redis) {
-		this.publisher = publisher || new Redis(REDIS_CONFIG as string);
-		this.subscriber = subscriber || new Redis(REDIS_CONFIG as string);
+		const clientOptions = {
+			maxRetriesPerRequest: 5,  // Lower this from default
+			retryStrategy(times: number) {
+				const delay = Math.min(times * 200, 2000);
+				return delay;
+			},
+			reconnectOnError(err: Error) {
+				const targetError = "READONLY";
+				if (err.message.includes(targetError)) {
+					return true; // Only reconnect on specific errors
+				}
+				return false;
+			},
+		};
+		this.publisher = publisher || new Redis(REDIS_CONFIG as string, clientOptions);
+		this.subscriber = subscriber || new Redis(REDIS_CONFIG as string, clientOptions);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
@@ -69,8 +83,13 @@ export class NotificationsService {
 				console.log("Connected to redis");
 			});
 
-			client.on("reconnecting", () => {
-				console.log("Reconnecting to Redis...");
+			client.on("reconnecting", (delay: number) => {
+				console.log(`Reconnecting to Redis in ${delay}ms...`);
+			});
+
+			// Add a close event handler
+			client.on("close", () => {
+				console.log("Redis connection closed");
 			});
 		}
 	}
