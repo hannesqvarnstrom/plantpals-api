@@ -299,7 +299,7 @@ class TaxonomyService {
 					END`.as("plant_types_available"),
 		};
 
-		const results = await dbManager.db
+		const resultsQ = dbManager.db
 			.selectDistinctOn([species.id], selectCols)
 			.from(species)
 			.where(finalWhere)
@@ -322,7 +322,8 @@ class TaxonomyService {
 			.limit(30)
 			.groupBy(species.id, genera.id, families.id)
 			.offset(page ? page * 30 : 0);
-
+		console.log('RESULTS_Q', resultsQ.toSQL())
+		const results = await resultsQ.execute()
 		const mappedResults: HydratedSpeciesSearchResult[] = [];
 
 		for (const item of results) {

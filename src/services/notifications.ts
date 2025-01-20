@@ -52,7 +52,7 @@ export class NotificationsService {
 			},
 		};
 		// Use a shared connection for both publisher and subscriber
-		console.log('REDIS_CONFIG:', REDIS_CONFIG)
+
 		this.publisher = this.subscriber = new Redis(REDIS_CONFIG as string, clientOptions);
 
 		// this.publisher = publisher || new Redis(REDIS_CONFIG as string, clientOptions);
