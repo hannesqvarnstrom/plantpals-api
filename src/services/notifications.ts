@@ -15,15 +15,15 @@ export type NotificationTypes =
 export type NotificationPayload<T extends NotificationTypes> = {
 	type: T;
 	payload: T extends "MATCHES_UPDATE"
-		? TradeMatch[]
-		: T extends "TRADES_UPDATE"
-			? Trades
-			: T extends "TRADES_MESSAGES_UPDATE"
-				? (TTradeMessage & {
-						suggestion: TTradeSuggestion | null;
-						sender: TUser;
-					})[]
-				: undefined;
+	? TradeMatch[]
+	: T extends "TRADES_UPDATE"
+	? Trades
+	: T extends "TRADES_MESSAGES_UPDATE"
+	? (TTradeMessage & {
+		suggestion: TTradeSuggestion | null;
+		sender: TUser;
+	})[]
+	: undefined;
 };
 
 export class NotificationsService {
@@ -34,8 +34,8 @@ export class NotificationsService {
 	protected userConnections: Map<string, Set<Response>> = new Map();
 
 	constructor(publisher?: Redis, subscriber?: Redis) {
-		this.publisher = publisher || new Redis(REDIS_CONFIG);
-		this.subscriber = subscriber || new Redis(REDIS_CONFIG);
+		this.publisher = publisher || new Redis(REDIS_CONFIG as string);
+		this.subscriber = subscriber || new Redis(REDIS_CONFIG as string);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
@@ -135,5 +135,5 @@ export class NotificationsService {
 }
 
 export class TestNotificationsService extends NotificationsService {
-	protected setupRedisErrorHandling() {}
+	protected setupRedisErrorHandling() { }
 }
