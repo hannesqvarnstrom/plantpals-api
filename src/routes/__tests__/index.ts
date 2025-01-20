@@ -137,7 +137,10 @@ describe("Authentication", () => {
 				sinon.restore();
 				oauthVerifyTokenStub = sinon
 					.stub(oauthService, "verifyGoogleToken")
-					.resolves({ email: email, id: gId });
+					.resolves({
+						email: email, id: gId,
+						username: ""
+					});
 			});
 			afterAll(() => {
 				oauthVerifyTokenStub.restore();
