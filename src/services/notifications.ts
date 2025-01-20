@@ -35,7 +35,7 @@ export class NotificationsService {
 
 	constructor(publisher?: Redis, subscriber?: Redis) {
 		const clientOptions = {
-			maxRetriesPerRequest: 5,  // Lower this from default
+			maxRetriesPerRequest: 10,
 			retryStrategy(times: number) {
 				const delay = Math.min(times * 200, 2000);
 				return delay;
@@ -47,9 +47,16 @@ export class NotificationsService {
 				}
 				return false;
 			},
+			tls: {
+				rejectUnauthorized: false, // Required for Upstash (if TLS is enforced)
+			},
 		};
-		this.publisher = publisher || new Redis(REDIS_CONFIG as string, clientOptions);
-		this.subscriber = subscriber || new Redis(REDIS_CONFIG as string, clientOptions);
+		// Use a shared connection for both publisher and subscriber
+		console.log('REDIS_CONFIG:', REDIS_CONFIG)
+		this.publisher = this.subscriber = new Redis(REDIS_CONFIG as string, clientOptions);
+
+		// this.publisher = publisher || new Redis(REDIS_CONFIG as string, clientOptions);
+		// this.subscriber = subscriber || new Redis(REDIS_CONFIG as string, clientOptions);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
