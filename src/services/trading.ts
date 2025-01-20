@@ -121,6 +121,7 @@ class TradingService {
 					id: tradeStatusTypes?.id,
 					name: tradeStatusTypes.name,
 					value: tradeStatusTypes.value,
+					changedAt: tradeStatusChanges.changedAt
 				})
 				.from(tradeStatusChanges)
 				.where(eq(tradeStatusChanges.tradeId, trade.id))

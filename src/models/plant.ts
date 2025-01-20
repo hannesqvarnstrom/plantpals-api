@@ -111,6 +111,7 @@ export default class PlantModel {
 			.select()
 			.from(plants)
 			.where(and(eq(plants.userId, userId), isNull(plants.deletedAt)))
+
 			.prepare(`getByUserId${new Date().getTime()}`);
 
 		const result = await query.execute();

@@ -72,26 +72,72 @@ class TaxonomyService {
 		speciesId,
 		onlyAccepted,
 		excludeRank,
-	}: SearchArguments): Promise<TaxonomySearchResult[]> {
+	}: SearchArguments, userId?: number): Promise<TaxonomySearchResult[]> {
 		const query = `%${q}%`;
+		const staticCols = {
+			numOfUsersWithTaxon: countDistinct(plants.userId),
+			plantTypesAvailable: sql<PlantTypeCol[] | null>`
+					CASE WHEN MAX(plants.type) IS NOT NULL THEN 
+						array_to_json(
+							array_agg(
+								distinct plants.type
+							)
+						) 
+					ELSE
+						null
+					END`.as("plant_types_available"),
+		}
+		const plantsJoin = and(
+			eq(plants.speciesId, species.id),
+			isNull(plants.deletedAt),
+			exists(
+				dbManager.db
+					.select({ id: tradeablePlants.id })
+					.from(tradeablePlants)
+					.where(eq(tradeablePlants.plantId, plants.id)),
+			),
+			not(eq(plants.userId, userId ?? -1)), // @todo this is ugly
+		)
+
 		const familyQuery = await dbManager.db
 			.selectDistinctOn([families.id], {
 				taxonId: families.id,
 				taxonType: sql<"family">`'family'`.as("taxon_type"),
 				name: families.name,
+				...staticCols
 			})
 			.from(families)
 			.where(ilike(families.name, query))
+			.groupBy(families.id)
+			.leftJoin(species, and(
+				eq(species.familyId, families.id)
+			))
+			.leftJoin(
+				plants,
+				plantsJoin
+			)
 			.limit(3);
 
 		const _genusQuery = dbManager.db
 			.selectDistinctOn([genera.id], {
 				taxonId: genera.id,
+				familyId: families.id,
+				familyName: families.name,
 				taxonType: sql<"genus">`'genus'`.as("taxon_type"),
 				name: genera.name,
+				...staticCols
 			})
 			.from(genera)
 			.where(ilike(genera.name, query))
+			.groupBy(genera.id, families.id)
+			.innerJoin(families, eq(genera.familyId, families.id))
+			.leftJoin(species, and(
+				eq(species.genusId, genera.id)
+			))
+			.leftJoin(
+				plants,
+				plantsJoin
+			)
 			.limit(3);
 
 		const genusQuery = await _genusQuery.execute();
@@ -101,6 +147,11 @@ class TaxonomyService {
 				taxonId: species.id,
 				taxonType: sql<"species">`'species'`.as("taxon_type"),
 				name: species.name,
+				genusId: genera.id,
+				genusName: genera.name,
+				familyId: families.id,
+				familyName: families.name,
+				...staticCols
 			})
 			.from(species)
 			.where(
@@ -108,9 +159,21 @@ class TaxonomyService {
 					? and(ilike(species.name, query), not(eq(species.rank, excludeRank)))
 					: ilike(species.name, query) || ilike(species.vernacularNames, query),
 			)
+			.innerJoin(families, eq(species.familyId, families.id))
+			.innerJoin(genera, eq(species.genusId, genera.id))
+			.leftJoin(
+				plants,
+				plantsJoin
+			)
+			.groupBy(species.id, genera.id, families.id)
 			.limit(10)
 			.offset(page ? page * 30 : 0);
 
+
+		/**
+		 * @NOTE
+		 * this might (?) take a lot of performance to do. ~40 extra queries per search, done at the same time.
+		 */
 		return Promise.all(
 			[...familyQuery, ...genusQuery, ...speciesQuery].map(async (taxon) => {
 				const speciesName =
@@ -120,9 +183,9 @@ class TaxonomyService {
 				const name =
 					taxon.taxonType === "species" && speciesName
 						? {
-								fullName: speciesName.name,
-								scientificPortions: speciesName.scientificPortions,
-							}
+							fullName: speciesName.name,
+							scientificPortions: speciesName.scientificPortions,
+						}
 						: taxon.taxonType === "genus"
 							? { fullName: taxon.name, scientificPortions: [taxon.name] }
 							: { fullName: taxon.name, scientificPortions: [] };
@@ -1365,4 +1428,10 @@ export interface TaxonomySearchResult {
 	taxonId: number;
 	taxonType: "species" | "genus" | "family";
 	name: { fullName: string; scientificPortions: string[] };
+	genusId?: number;
+	familyId?: number;
+	familyName?: string;
+	genusName?: string;
+	numOfUsersWithTaxon: number;
+	plantTypesAvailable: PlantTypeCol[] | null;
 }

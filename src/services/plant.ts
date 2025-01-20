@@ -37,13 +37,11 @@ class PlantService {
 	model: PlantModel;
 	userModel: UserModel;
 	speciesModel: SpeciesModel;
-	//     traderModel: TraderModel;
 
 	constructor() {
 		this.model = new PlantModel();
 		this.userModel = new UserModel();
 		this.speciesModel = new SpeciesModel();
-		// this.traderModel = new TraderModel()
 	}
 
 	public async getUserCollection(user: TUser): Promise<CollectedPlant[]>;
@@ -64,7 +62,7 @@ class PlantService {
 			const collectedPlant = await this.getCollectedPlant(plant, userId);
 			collection.push(collectedPlant);
 		}
-
+		collection.sort((a, b) => a.fullName.localeCompare(b.fullName))
 		return collection;
 	}
 

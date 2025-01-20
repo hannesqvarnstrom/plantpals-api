@@ -20,13 +20,13 @@ import {
 
 const taxonomyRouter = Router();
 
-taxonomyRouter.get("/search", async (req, res, next) => {
+taxonomyRouter.get("/search", allowJwtButNotRequire, async (req, res, next) => {
 	try {
 		const { query } = req.query;
 		if (!query || typeof query !== "string") {
 			throw new AppError("Query is required");
 		}
-		const searchResults = await taxonomyService.searchTaxons({ q: query });
+		const searchResults = await taxonomyService.searchTaxons({ q: query }, req.jwtPayload?.userId);
 		return res.send(searchResults);
 	} catch (e) {
 		return next(e);
