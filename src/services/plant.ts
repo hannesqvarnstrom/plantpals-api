@@ -1,3 +1,4 @@
+
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import dbManager from "../db";
 import {
@@ -58,10 +59,15 @@ class PlantService {
 
 		const plants = await this.model.getByUserId(userId);
 		const collection: CollectedPlant[] = [];
-		for (const plant of plants) {
-			const collectedPlant = await this.getCollectedPlant(plant, userId);
-			collection.push(collectedPlant);
+		const chunkSize = 10;
+		for (let i = 0; i < plants.length; i += chunkSize) {
+			const chunkPlants = plants.slice(i, i + chunkSize)
+			await Promise.all(chunkPlants.map(async (cp) => {
+				const collectedPlant = await this.getCollectedPlant(cp, userId);
+				collection.push(collectedPlant);
+			}))
 		}
+
 		collection.sort((a, b) => a.fullName.localeCompare(b.fullName))
 		return collection;
 	}
@@ -130,11 +136,9 @@ class PlantService {
 		plant: Omit<TPlant, "deletedAt">,
 		requestingUserId: number,
 	): Promise<CollectedPlant> {
-		// const species = await this.speciesModel.getById(plant.speciesId);
 
-		const [collectedPlant, ..._] = await dbManager.db
+		const q = dbManager.db
 			.select({
-				// id: species.id,
 				name: species.name,
 				genusId: species.genusId,
 				familyId: species.familyId,
@@ -159,6 +163,8 @@ class PlantService {
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
 			.where(eq(species.id, plant.speciesId));
+
+		const [collectedPlant, ..._] = await q.execute()
 
 		if (!collectedPlant || !collectedPlant.genusName) {
 			throw new AppError("species not found", 404);

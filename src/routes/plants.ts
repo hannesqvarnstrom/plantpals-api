@@ -42,8 +42,8 @@ plantsRouter.post(
 				speciesId,
 				type,
 			});
-
-			return res.status(201).send(newPlant);
+			const collectedPlant = await plantService.getCollectedPlant(newPlant, user.id)
+			return res.status(201).send(collectedPlant);
 		} catch (e) {
 			return next(e);
 		}

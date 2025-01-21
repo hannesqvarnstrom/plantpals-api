@@ -754,8 +754,20 @@ class TaxonomyService {
 		return perfectMatchTrades;
 	}
 
-	public async getFullSpeciesName(speciesId: number): Promise<string> {
-		const species = await this.speciesModel.getById(speciesId);
+
+	public async getFullSpeciesName(species: TSpecies): Promise<string>
+	public async getFullSpeciesName(speciesId: number): Promise<string>
+	public async getFullSpeciesName(arg: TSpecies | number): Promise<string> {
+		let speciesId: number
+		let species: TSpecies
+		if (typeof arg === 'number') {
+			speciesId = arg
+			species = await this.speciesModel.getById(speciesId, true);
+		} else {
+			speciesId = arg.id
+			species = arg
+		}
+
 		if (!species) {
 			throw new Error(`cant find species with id ${speciesId}`);
 		}

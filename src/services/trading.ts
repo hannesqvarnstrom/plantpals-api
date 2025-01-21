@@ -226,7 +226,9 @@ class TradingService {
 		}[]
 	> {
 		const userPlants = await plantService.getUserCollection(user.id);
+
 		const userInterests = await userService.getInterests(user.id);
+
 		if (
 			(!userInterests.family.length &&
 				!userInterests.genus.length &&
@@ -286,34 +288,6 @@ class TradingService {
 				.innerJoin(species, eq(species.id, plants.speciesId)),
 		);
 
-		// const requireSomeMatchingPlant = exists(
-		// 	dbManager.db
-		// 		.select({ id: plants.id })
-		// 		.from(plants)
-		// 		.where(
-		// 			and(
-		// 				isNull(plants.deletedAt),
-		// 				eq(plants.userId, users.id),
-		// 				or(
-		// 					inArray(
-		// 						species.id,
-		// 						userInterests.species.map((s) => s.speciesId),
-		// 					),
-		// 					inArray(
-		// 						species.genusId,
-		// 						userInterests.genus.map((s) => s.genusId),
-		// 					),
-		// 					inArray(
-		// 						species.familyId,
-		// 						userInterests.family.map((s) => s.familyId),
-		// 					),
-		// 				),
-		// 			),
-		// 		)
-		// 		.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
-		// 		.innerJoin(species, eq(species.id, plants.speciesId))
-		// 		.limit(1),
-		// );
 		const excludeStatuses = await dbManager.db
 			.select({ id: tradeStatusTypes.id })
 			.from(tradeStatusTypes)
@@ -326,8 +300,18 @@ class TradingService {
 				]),
 			);
 
+		const excludedTrades = dbManager.db.$with('excluded_trades').as(
+			dbManager.db.select({ tradeId: tradeStatusChanges.tradeId }).from(tradeStatusChanges)
+				.where(
+					inArray(
+						tradeStatusChanges.statusId,
+						excludeStatuses.map((x) => x.id)
+					)
+				)
+		)
+
 		const usersQuery = dbManager.db
-			.with(userInterestPlants)
+			.with(userInterestPlants, excludedTrades)
 			.select({
 				userId: users.id,
 				username: users.username,
@@ -379,16 +363,10 @@ class TradingService {
 					not(
 						exists(
 							dbManager.db
-								.select({ id: tradeStatusChanges.id })
-								.from(tradeStatusChanges)
+								.select({ tradeId: excludedTrades.tradeId })
+								.from(excludedTrades)
 								.where(
-									and(
-										eq(tradeStatusChanges.tradeId, trades.id),
-										inArray(
-											tradeStatusChanges.statusId,
-											excludeStatuses.map((x) => x.id),
-										),
-									),
+									eq(excludedTrades.tradeId, trades.id)
 								)
 								.limit(1),
 						),
@@ -397,7 +375,8 @@ class TradingService {
 			)
 			.groupBy(users.id, users.username)
 			.orderBy(desc(sql`"speciesMatches"`), desc(sql`"otherMatches"`));
-
+		const analysis = await dbManager.db.execute(sql`EXPLAIN ANALYZE ${usersQuery.getSQL()};`)
+		console.log('analysis users query:', analysis)
 		return usersQuery.execute();
 	}
 

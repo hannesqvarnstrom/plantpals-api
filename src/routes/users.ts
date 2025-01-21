@@ -13,6 +13,13 @@ usersRouter.get("/me", requireJwt, async (req, res, next) => {
 	try {
 		const userId = req.jwtPayload?.userId as number;
 		const userInfo = await userService.getById(userId);
+		/**
+		 * @todo
+		 * 
+		 * - set up redis cache for user collection OR collected plants.
+		 * - or...
+		 * - try to investigate the index issues. there is likely at least one query going on which is not efficient
+		 */
 		const plantCollection = await plantService.getUserCollection(userId);
 		return res.send({ userInfo, plantCollection });
 	} catch (e) {

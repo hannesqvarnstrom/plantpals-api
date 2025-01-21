@@ -7,6 +7,10 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX ON species USING gin (name gin_trgm_ops);
 CREATE INDEX ON species USING gin (species_name gin_trgm_ops);
 CREATE INDEX ON species USING gin (cultivar_name gin_trgm_ops);
+CREATE INDEX idx_plants_user_species ON plants(user_id, species_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_species_taxonomy ON species(id, genus_id, family_id);
+
+CREATE INDEX idx_tradeable_plants_plant_id ON tradeable_plants(plant_id);
 ```
 
 
