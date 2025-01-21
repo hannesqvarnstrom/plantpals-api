@@ -1064,6 +1064,10 @@ class TaxonomyService {
 				familyId = genus.familyId;
 				name = `${genus.name} ${momName} × ${dadName}`;
 				speciesName = `(${momName} × ${dadName})`;
+				if (crossMomId === crossDadId) {
+					name = `${genus.name} ${momName} × self`
+					speciesName = `(${momName} × self)`;
+				}
 				break;
 			}
 			default:
@@ -1130,6 +1134,9 @@ class TaxonomyService {
 				const dadName = getCrossParentName(dad);
 
 				name = `${genus?.name} ${momName} × ${dadName}`;
+				if (mom.id === dad.id) {
+					name = `${genus?.name} ${momName} × self`;
+				}
 				break;
 			}
 			case "cultivar": {
@@ -1444,7 +1451,7 @@ function getScientificPartsOfName(name: string): string[] {
 	for (let substr of splitName) {
 		substr = substr.replace(/\(|\)/g, "");
 		const isScientific =
-			!substr.startsWith("'") && !substr.endsWith("'") && substr !== "×";
+			!substr.startsWith("'") && !substr.endsWith("'") && substr !== "×" && substr !== 'self';
 		if (isScientific) {
 			scientificPortions.push(substr);
 		}
