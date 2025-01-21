@@ -73,6 +73,20 @@ class TaxonomyService {
 		onlyAccepted,
 		excludeRank,
 	}: SearchArguments, userId?: number): Promise<TaxonomySearchResult[]> {
+		const searchTerms = q.toLowerCase().trim().split(/\s+/);
+
+		const searchConditions = searchTerms.map((term) => {
+			const termQuery = `%${term === "x" ? "×" : term}%`;
+			return or(
+				ilike(species.name, termQuery),
+			);
+		});
+
+		const searchWhere = and(...searchConditions);
+		const finalWhere = excludeRank
+			? and(searchWhere, not(eq(species.rank, excludeRank)))
+			: searchWhere;
+
 		const query = `%${q}%`;
 		const staticCols = {
 			numOfUsersWithTaxon: countDistinct(plants.userId),
@@ -118,7 +132,7 @@ class TaxonomyService {
 			)
 			.limit(3);
 
-		const _genusQuery = dbManager.db
+		const genusQuery = dbManager.db
 			.selectDistinctOn([genera.id], {
 				taxonId: genera.id,
 				familyId: families.id,
@@ -140,9 +154,9 @@ class TaxonomyService {
 			)
 			.limit(3);
 
-		const genusQuery = await _genusQuery.execute();
+		const genusResult = await genusQuery.execute();
 
-		const speciesQuery = await dbManager.db
+		const speciesQuery = dbManager.db
 			.selectDistinctOn([species.id], {
 				taxonId: species.id,
 				taxonType: sql<"species">`'species'`.as("taxon_type"),
@@ -155,9 +169,7 @@ class TaxonomyService {
 			})
 			.from(species)
 			.where(
-				excludeRank
-					? and(ilike(species.name, query), not(eq(species.rank, excludeRank)))
-					: ilike(species.name, query) || ilike(species.vernacularNames, query),
+				finalWhere
 			)
 			.innerJoin(families, eq(species.familyId, families.id))
 			.innerJoin(genera, eq(species.genusId, genera.id))
@@ -169,13 +181,21 @@ class TaxonomyService {
 			.limit(10)
 			.offset(page ? page * 30 : 0);
 
+		const speciesResult = await speciesQuery.execute()
 
 		/**
 		 * @NOTE
 		 * this might (?) take a lot of performance to do. ~40 extra queries per search, done at the same time.
+		 * 
+		 * alternatives:
+		 * - skip some of the "collectedPlant" properties; those that can be computed based on frontend store state can be skipped
+		 * - return a new type of resource to the frontend, which should be a plantId (collectedPlantId), and then the frontend can have a pinia store (sortoff) of all the collectedplantids and their respective data,
+		 * and each card can be responsible for fetching it's own data. 
+		 * and that data would then keep on living in store memory. 
+		 * - use the cache somehow? maybe get some static things from a cache of the "collectedPlant" somehow.
 		 */
 		return Promise.all(
-			[...familyQuery, ...genusQuery, ...speciesQuery].map(async (taxon) => {
+			[...familyQuery, ...genusResult, ...speciesResult].map(async (taxon) => {
 				const speciesName =
 					taxon.taxonType === "species"
 						? await this.getScientificallySplitName(taxon.taxonId)
