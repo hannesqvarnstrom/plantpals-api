@@ -55,7 +55,8 @@ export class NotificationsService {
 			}
 		}
 
-		this.publisher = this.subscriber = new Redis(REDIS_CONFIG as string, clientOptions);
+		this.publisher = new Redis(REDIS_CONFIG as string, clientOptions);
+		this.subscriber = new Redis(REDIS_CONFIG as string, clientOptions);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
