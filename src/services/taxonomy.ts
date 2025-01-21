@@ -203,14 +203,25 @@ class TaxonomyService {
 		onlyAccepted,
 		excludeRank,
 	}: SearchArguments): Promise<RawSpecies[]> {
-		const query = `%${q}%`;
+		const searchTerms = q.toLowerCase().trim().split(/\s+/);
+
+		const searchConditions = searchTerms.map((term) => {
+			const termQuery = `%${term === "x" ? "×" : term}%`;
+			return or(
+				ilike(species.name, termQuery),
+			);
+		});
+
+		const searchWhere = and(...searchConditions);
+		const finalWhere = excludeRank
+			? and(searchWhere, not(eq(species.rank, excludeRank)))
+			: searchWhere;
+
 		const speciesQuery = await dbManager.db
 			.selectDistinctOn([species.id])
 			.from(species)
 			.where(
-				excludeRank
-					? and(ilike(species.name, query), not(eq(species.rank, excludeRank)))
-					: ilike(species.name, query) || ilike(species.vernacularNames, query),
+				finalWhere
 			)
 			.limit(30)
 			.offset(page ? page * 30 : 0);
