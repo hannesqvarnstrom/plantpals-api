@@ -1,0 +1,17 @@
+## PERFORMANCE
+To handle the performance of the complex search queries, we need extra indexes not supplied by Drizzle.
+The following needs to be run on the database in question.
+
+```
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX ON species USING gin (name gin_trgm_ops);
+CREATE INDEX ON species USING gin (species_name gin_trgm_ops);
+CREATE INDEX ON species USING gin (cultivar_name gin_trgm_ops);
+```
+
+
+## Rollbacks
+This is WIP.
+Once a day, we should take a snapshot of the DB in production, and upload this "somewhere" (s3?).
+When rolling back, we should create a NEW DB, into which we insert the backup. 
+Trying to rollback into an existing DB will always be very annoying.

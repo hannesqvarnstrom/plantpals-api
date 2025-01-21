@@ -261,15 +261,18 @@ class TaxonomyService {
 			const termQuery = `%${term === "x" ? "×" : term}%`;
 			return or(
 				ilike(species.name, termQuery),
+
+				/**
+				 * @todo
+				 * set up separate table of vernacularnames. 
+				 * or think of something that works for all taxon levels
+				 */
 				// ilike(species.vernacularNames, termQuery),
-				sql`EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements_text(${species.vernacularNames}) as vname
-                    WHERE vname ILIKE ${termQuery}
-                )`,
-				ilike(species.speciesName, termQuery),
-				ilike(species.cultivarName, termQuery),
-				ilike(genera.name, termQuery),
+				// sql`EXISTS (
+				//     SELECT 1
+				//     FROM jsonb_array_elements_text(${species.vernacularNames}) as vname
+				//     WHERE vname ILIKE ${termQuery}
+				// )`,
 			);
 		});
 
@@ -322,7 +325,8 @@ class TaxonomyService {
 			.limit(30)
 			.groupBy(species.id, genera.id, families.id)
 			.offset(page ? page * 30 : 0);
-		console.log('RESULTS_Q', resultsQ.toSQL())
+		// const analyze = await dbManager.db.execute(sql`EXPLAIN ANALYZE ${resultsQ.getSQL()}`)
+		// console.log('RESULTS_Q', analyze)
 		const results = await resultsQ.execute()
 		const mappedResults: HydratedSpeciesSearchResult[] = [];
 

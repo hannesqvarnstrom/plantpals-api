@@ -10,6 +10,7 @@ import { NotificationsService } from "../services/notifications";
 
 export default function makeServer(): Promise<Express> {
 	const server = express();
+
 	server.use(express.json());
 	server.use(
 		cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }),

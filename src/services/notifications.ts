@@ -1,6 +1,6 @@
 import type { ServerResponse } from "node:http";
 import type { Response } from "express";
-import Redis from "ioredis";
+import Redis, { type RedisOptions } from "ioredis";
 import RedisMock from "ioredis-mock";
 import type { TTradeMessage } from "../models/trade-message";
 import type { TTradeSuggestion } from "../models/trade-suggestion";
@@ -34,7 +34,7 @@ export class NotificationsService {
 	protected userConnections: Map<string, Set<Response>> = new Map();
 
 	constructor(publisher?: Redis, subscriber?: Redis) {
-		const clientOptions = {
+		const clientOptions: RedisOptions = {
 			maxRetriesPerRequest: 10,
 			retryStrategy(times: number) {
 				const delay = Math.min(times * 200, 2000);
@@ -43,20 +43,19 @@ export class NotificationsService {
 			reconnectOnError(err: Error) {
 				const targetError = "READONLY";
 				if (err.message.includes(targetError)) {
-					return true; // Only reconnect on specific errors
+					return true; // only reconnect on specific errors
 				}
 				return false;
 			},
-			tls: {
-				rejectUnauthorized: false, // Required for Upstash (if TLS is enforced)
-			},
+
 		};
-		// Use a shared connection for both publisher and subscriber
+		if (process.env.NODE_ENV !== 'development') {
+			clientOptions.tls = {
+				rejectUnauthorized: false, // Required for Upstash (if TLS is enforced)
+			}
+		}
 
 		this.publisher = this.subscriber = new Redis(REDIS_CONFIG as string, clientOptions);
-
-		// this.publisher = publisher || new Redis(REDIS_CONFIG as string, clientOptions);
-		// this.subscriber = subscriber || new Redis(REDIS_CONFIG as string, clientOptions);
 
 		this.setupRedisErrorHandling();
 		this.initializeSubscriber();
