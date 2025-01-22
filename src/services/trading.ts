@@ -375,8 +375,8 @@ class TradingService {
 			)
 			.groupBy(users.id, users.username)
 			.orderBy(desc(sql`"speciesMatches"`), desc(sql`"otherMatches"`));
-		const analysis = await dbManager.db.execute(sql`EXPLAIN ANALYZE ${usersQuery.getSQL()};`)
-		console.log('analysis users query:', analysis)
+		// const analysis = await dbManager.db.execute(sql`EXPLAIN ANALYZE ${usersQuery.getSQL()};`)
+		// console.log('analysis users query:', analysis)
 		return usersQuery.execute();
 	}
 
