@@ -1,7 +1,7 @@
-import { InferInsertModel, InferSelectModel, and, eq } from "drizzle-orm"
+import { type InferInsertModel, type InferSelectModel, and, eq } from "drizzle-orm"
+import dbManager from "../db/index"
 import { federatedIdentities } from "../db/schema"
-import { OAuthProvider } from "../services/authentication"
-import dbManager from "../db"
+import type { OAuthProvider } from "../services/authentication"
 import { AppError } from "../utils/errors"
 
 export type RawIdentity = InferSelectModel<typeof federatedIdentities>
@@ -27,7 +27,7 @@ export default class IdentityModel {
                     eq(federatedIdentities.provider, provider)
                 )
             )
-            .prepare('findIdentityByProvider' + new Date().getTime())
+            .prepare(`findIdentityByProvider${new Date().getTime()}`)
 
         const [result, ..._] = await q.execute()
 
@@ -38,7 +38,7 @@ export default class IdentityModel {
         const q = dbManager.db.insert(federatedIdentities)
             .values(payload)
             .returning()
-            .prepare('insertIdentity' + new Date().getTime())
+            .prepare(`insertIdentity${new Date().getTime()}`)
 
         const [result, ..._] = await q.execute()
 

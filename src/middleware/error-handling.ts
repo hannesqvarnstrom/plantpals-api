@@ -3,6 +3,7 @@ import type { ZodError } from "zod";
 import envVars from "../utils/environment";
 
 export const errorHandler = (
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 	err: any,
 	_req: Request,
 	res: Response,

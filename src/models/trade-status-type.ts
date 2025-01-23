@@ -1,5 +1,5 @@
 import { type InferSelectModel, eq } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { tradeStatusTypes } from "../db/schema";
 import { AppError } from "../utils/errors";
 

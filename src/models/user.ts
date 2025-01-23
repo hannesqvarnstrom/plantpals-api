@@ -4,7 +4,7 @@ import {
 	eq,
 	or,
 } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { users } from "../db/schema";
 import { AppError } from "../utils/errors";
 

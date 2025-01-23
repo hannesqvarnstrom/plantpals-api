@@ -1,57 +1,13 @@
-import dbManager from "../db"
+import { type InferInsertModel, type InferSelectModel, eq } from 'drizzle-orm'
+import dbManager from "../db/index"
 import { speciesInterests } from "../db/schema"
-import { and, between, eq, InferColumnsDataTypes, InferInsertModel, InferSelectModel, sql } from 'drizzle-orm'
 import { AppError } from "../utils/errors"
-import { PlantTypeCol } from "../services/plant"
 
 export type RawSpeciesInterest = InferSelectModel<typeof speciesInterests>
 export type TSpeciesInterestCreateArgs = InferInsertModel<typeof speciesInterests>
 export type TSpeciesInterest = RawSpeciesInterest
 
-
-// export interface ShallowPlant {
-//     name: string
-//     {
-//         genusName: string;
-//         speciesName?: string;
-//         varietyName?: string;
-//         name1a?: {
-//             species: boolean;
-//             name: string;
-//         };
-//         name1b?: {
-//             species: boolean;
-//             name: string;
-//         };
-
-//         name2a?: {
-//             species: boolean;
-//             name: string;
-//         };
-
-//         name2b?: {
-//             species: boolean;
-//             name: string;
-//         };
-//     },
-//     fromTrader?: number | null,
-//     location?: string,
-//     type?: PlantTypeCol,
-//     image?: string,
-//     fontSize: string
-//     // ETC
-// }
-
-// export interface DeepPlant extends ShallowPlant {
-//     id: string,
-// }
-
-
 export default class SpeciesInterestModel {
-    constructor() {
-
-    }
-
     public static factory(params: RawSpeciesInterest): TSpeciesInterest {
         const { id, speciesId, userId } = params
         return { id, speciesId, userId }
@@ -62,7 +18,7 @@ export default class SpeciesInterestModel {
             .values(args)
             .returning()
             .prepare(
-                'createSpeciesInterest' + new Date().getTime()
+                `createSpeciesInterest${new Date().getTime()}`
             )
 
         const [result, ..._] = await query.execute()
@@ -79,24 +35,23 @@ export default class SpeciesInterestModel {
         const query = dbManager.db.select()
             .from(speciesInterests)
             .where(eq(speciesInterests.id, id))
-            .prepare('getBySpeciesInterestId' + new Date().getTime())
+            .prepare(`getBySpeciesInterestId${new Date().getTime()}`)
 
         const [result, ..._] = await query.execute()
 
         if (result) {
             const plant = SpeciesInterestModel.factory(result)
             return plant
-        } else {
-            if (require) throw new AppError('Species interest not found', 404)
-            return undefined
         }
+        if (require) throw new AppError('Species interest not found', 404)
+        return undefined
     }
 
     public async getByUserId(userId: number): Promise<TSpeciesInterest[]> {
         const query = dbManager.db.select()
             .from(speciesInterests)
             .where(eq(speciesInterests.userId, userId))
-            .prepare('getByUserId' + new Date().getTime())
+            .prepare(`getByUserId${new Date().getTime()}`)
 
         const result = await query.execute()
         return result

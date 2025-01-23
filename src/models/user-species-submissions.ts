@@ -1,5 +1,5 @@
 import { type InferInsertModel, type InferSelectModel, eq } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { userSpeciesSubmissions } from "../db/schema";
 import { AppError } from "../utils/errors";
 

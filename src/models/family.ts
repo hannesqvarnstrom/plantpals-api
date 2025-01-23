@@ -1,16 +1,10 @@
 import {
-	InferColumnsDataTypes,
 	type InferInsertModel,
 	type InferSelectModel,
-	and,
-	between,
 	eq,
-	inArray,
-	sql,
 } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { families } from "../db/schema";
-import { PlantTypeCol } from "../services/plant";
 import { AppError } from "../utils/errors";
 
 export type RawFamily = InferSelectModel<typeof families>;
@@ -18,8 +12,6 @@ export type TFamilyCreateArgs = InferInsertModel<typeof families>;
 export type TFamily = RawFamily;
 
 export default class FamilyModel {
-	constructor() {}
-
 	public static factory(params: RawFamily): TFamily {
 		const { id, name, gbifKey, vernacularNames, createdAt } = params;
 		return { id, name, gbifKey, vernacularNames, createdAt };
@@ -30,7 +22,7 @@ export default class FamilyModel {
 			.insert(families)
 			.values(args)
 			.returning()
-			.prepare("createFamily" + new Date().getTime());
+			.prepare(`createFamily${new Date().getTime()}`);
 
 		const [result, ..._] = await query.execute();
 		if (!result) {
@@ -50,7 +42,7 @@ export default class FamilyModel {
 			.select()
 			.from(families)
 			.where(eq(families.id, id))
-			.prepare("getByFamilyId" + new Date().getTime());
+			.prepare(`getByFamilyId${new Date().getTime()}`);
 
 		const [result, ..._] = await query.execute();
 

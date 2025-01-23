@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { requireJwt, requireUser } from "../middleware/jwt";
 import userService from "../services/user";
-import { AppError } from "../utils/errors";
 
 const interestsRouter = Router();
 interestsRouter.use(requireJwt, async (req, res, next) => {

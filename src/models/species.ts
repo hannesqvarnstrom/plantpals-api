@@ -1,58 +1,16 @@
 import {
-	InferColumnsDataTypes,
 	type InferInsertModel,
 	type InferSelectModel,
-	and,
-	between,
 	eq,
 	inArray,
-	sql,
 } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { species, userSpeciesSubmissions, users } from "../db/schema";
-import { PlantTypeCol } from "../services/plant";
 import { AppError } from "../utils/errors";
 
 export type RawSpecies = InferSelectModel<typeof species>;
 export type TSpeciesCreateArgs = InferInsertModel<typeof species>;
 export type TSpecies = RawSpecies;
-
-// export interface ShallowPlant {
-//     name: string
-//     {
-//         genusName: string;
-//         speciesName?: string;
-//         varietyName?: string;
-//         name1a?: {
-//             species: boolean;
-//             name: string;
-//         };
-//         name1b?: {
-//             species: boolean;
-//             name: string;
-//         };
-
-//         name2a?: {
-//             species: boolean;
-//             name: string;
-//         };
-
-//         name2b?: {
-//             species: boolean;
-//             name: string;
-//         };
-//     },
-//     fromTrader?: number | null,
-//     location?: string,
-//     type?: PlantTypeCol,
-//     image?: string,
-//     fontSize: string
-//     // ETC
-// }
-
-// export interface DeepPlant extends ShallowPlant {
-//     id: string,
-// }
 
 export default class SpeciesModel {
 	public static factory(params: RawSpecies): TSpecies {

@@ -1,16 +1,10 @@
 import {
-	InferColumnsDataTypes,
 	type InferInsertModel,
 	type InferSelectModel,
-	and,
-	between,
 	eq,
-	inArray,
-	sql,
 } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { genera } from "../db/schema";
-import { PlantTypeCol } from "../services/plant";
 import { AppError } from "../utils/errors";
 
 export type RawGenus = InferSelectModel<typeof genera>;
@@ -18,7 +12,6 @@ export type TGenusCreateArgs = InferInsertModel<typeof genera>;
 export type TGenus = RawGenus;
 
 export default class GenusModel {
-	constructor() {}
 
 	public static factory(params: RawGenus): TGenus {
 		const {
@@ -46,7 +39,7 @@ export default class GenusModel {
 			.insert(genera)
 			.values(args)
 			.returning()
-			.prepare("createGenus" + new Date().getTime());
+			.prepare(`createGenus${new Date().getTime()}`);
 
 		const [result, ..._] = await query.execute();
 		if (!result) {
@@ -66,7 +59,7 @@ export default class GenusModel {
 			.select()
 			.from(genera)
 			.where(eq(genera.id, id))
-			.prepare("getByGenusId" + new Date().getTime());
+			.prepare(`getByGenusId${new Date().getTime()}`);
 
 		const [result, ..._] = await query.execute();
 

@@ -1,6 +1,6 @@
 import { type Response, Router } from "express";
 import { validateRequest } from "zod-express-middleware";
-import { JWTExpiresIn, requireJwt, signJwt } from "../middleware/jwt";
+import { JWTExpiresIn, signJwt } from "../middleware/jwt";
 import type { TUser } from "../models/user";
 import authService, { type OAuthProvider } from "../services/authentication";
 import oauthService from "../services/oauth";

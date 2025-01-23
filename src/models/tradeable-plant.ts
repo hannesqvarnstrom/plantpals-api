@@ -1,15 +1,10 @@
 import {
-	InferColumnsDataTypes,
 	type InferInsertModel,
 	type InferSelectModel,
-	and,
-	between,
 	eq,
-	sql,
 } from "drizzle-orm";
-import dbManager from "../db";
+import dbManager from "../db/index";
 import { tradeablePlants } from "../db/schema";
-import { PlantTypeCol } from "../services/plant";
 import { AppError } from "../utils/errors";
 
 export type RawTradeablePlant = InferSelectModel<typeof tradeablePlants>;
