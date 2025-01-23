@@ -345,7 +345,7 @@ class TaxonomyService {
 				),
 			)
 			.limit(30)
-			.groupBy(species.id, genera.id, families.id)
+			.groupBy(species.id, genera.id, families.id, speciesScientificNames.name, speciesScientificNames.scientificPortions)
 			.offset(page ? page * 30 : 0);
 
 		const results = await resultsQ.execute()
