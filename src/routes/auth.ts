@@ -16,20 +16,21 @@ authRouter.post(
 	async (req, res, next) => {
 		try {
 			const user = await userService.createUser(req.body);
-			return res.status(201).send(user);
+			return signAndSendUserToken(user, res)
 		} catch (e) {
 			return next(e);
 		}
 	},
 );
 
-const signAndSendUserToken = (user: TUser, res: Response) => {
+const signAndSendUserToken = (user: TUser, res: Response, data?: unknown) => {
 	const token = signJwt(user.id);
 	return res.status(200).send({
 		token,
 		userId: user.id,
 		expiry: new Date().setTime(new Date().getTime() + JWTExpiresIn * 1000),
 		username: user.username,
+		data
 		// expiresIn: JWTExpiresIn,
 	});
 };
@@ -70,21 +71,13 @@ authRouter.post(
 			const userIdentity = await authService.findUserIdentity(id, "GOOGLE");
 			if (userIdentity) {
 				const user = await userService.getById(userIdentity.userId);
-				return signAndSendUserToken(user, res);
+				return signAndSendUserToken(user, res,);
 			}
 			if (email) {
 				let user = await userService.getByEmail(email);
-
 				if (!user) {
 					user = await userService.createUser({ email, username });
-				} else {
-					// @todo - if user already exists in the app,
-					// force them to input their existing password to link the accounts
-					return res.status(200).send({
-						action: "prompt_normal_login",
-					});
 				}
-
 				const identityPayload = {
 					provider: "GOOGLE" as OAuthProvider,
 					providerId: id,
