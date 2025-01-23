@@ -11,13 +11,32 @@ export default async function setScientificNames() {
     const stream = new QueryStream(SQL.sql, SQL.params);
     const client = await dbManager.pool.connect();
     const queryStream = client.query(stream);
-    // const updatedSpecies: { id: number; speciesName: string }[] = [];
-    let i = 1
+
+    const promChunks: Promise<unknown>[][] = []
+    let i = 0;
     for await (const s of queryStream) {
         const { id } = s as TSpecies;
-        console.log(`setting sci name of species nr ${i}`)
-        await taxonomyService.updateScientificNameForSpecies(id)
-        i++
+
+        console.log('i:', i)
+        if (promChunks[i]) {
+            const chunks = promChunks[i] as Promise<unknown>[]
+
+            if (chunks.length <= 15) {
+                chunks.push(taxonomyService.updateScientificNameForSpecies(id))
+            } else {
+                promChunks.push([taxonomyService.updateScientificNameForSpecies(id)])
+                i++
+            }
+        } else {
+            promChunks[i] = [taxonomyService.updateScientificNameForSpecies(id)]
+        }
+    }
+
+    let j = 1
+    for (const chunk of promChunks) {
+        console.log('j:', j)
+        await Promise.all(chunk)
+        j++
     }
     return;
 }
