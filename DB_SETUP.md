@@ -11,6 +11,11 @@ CREATE INDEX idx_plants_user_species ON plants(user_id, species_id) WHERE delete
 CREATE INDEX idx_species_taxonomy ON species(id, genus_id, family_id);
 
 CREATE INDEX idx_tradeable_plants_plant_id ON tradeable_plants(plant_id);
+CREATE INDEX species_interests_user_id on species_interests(user_id);
+CREATE INDEX genus_interests_user_id on genus_interests(user_id);
+CREATE INDEX family_interests_user_id on family_interests(user_id);
+
+CREATE INDEX deleted_plants_index on plants(deleted_at) where deleted_at is not null;
 ```
 
 

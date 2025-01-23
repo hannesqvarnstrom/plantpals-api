@@ -21,6 +21,7 @@ import {
 	plants,
 	species,
 	speciesInterests,
+	speciesScientificNames,
 	tradeablePlants,
 	users,
 } from "../db/schema";
@@ -31,6 +32,7 @@ import SpeciesModel, {
 	type TSpecies,
 	type TSpeciesCreateArgs,
 } from "../models/species";
+import type { TSpeciesScientificName } from "../models/species-scientific-name";
 import type { TUser } from "../models/user";
 import UserSpeciesSubmissionModel, {
 	type TUserSpeciesSubmission,
@@ -160,7 +162,8 @@ class TaxonomyService {
 			.selectDistinctOn([species.id], {
 				taxonId: species.id,
 				taxonType: sql<"species">`'species'`.as("taxon_type"),
-				name: species.name,
+				name: speciesScientificNames.name,
+				scientificPortions: speciesScientificNames.scientificPortions,
 				genusId: genera.id,
 				genusName: genera.name,
 				familyId: families.id,
@@ -171,47 +174,32 @@ class TaxonomyService {
 			.where(
 				finalWhere
 			)
+			.innerJoin(speciesScientificNames, eq(species.id, speciesScientificNames.speciesId))
 			.innerJoin(families, eq(species.familyId, families.id))
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.leftJoin(
 				plants,
 				plantsJoin
 			)
-			.groupBy(species.id, genera.id, families.id)
+			.groupBy(species.id, genera.id, families.id, speciesScientificNames.name, speciesScientificNames.scientificPortions)
 			.limit(10)
 			.offset(page ? page * 30 : 0);
 
 		const speciesResult = await speciesQuery.execute()
 
-		/**
-		 * @NOTE
-		 * this might (?) take a lot of performance to do. ~40 extra queries per search, done at the same time.
-		 * 
-		 * alternatives:
-		 * - skip some of the "collectedPlant" properties; those that can be computed based on frontend store state can be skipped
-		 * - return a new type of resource to the frontend, which should be a plantId (collectedPlantId), and then the frontend can have a pinia store (sortoff) of all the collectedplantids and their respective data,
-		 * and each card can be responsible for fetching it's own data. 
-		 * and that data would then keep on living in store memory. 
-		 * - use the cache somehow? maybe get some static things from a cache of the "collectedPlant" somehow.
-		 */
-		return Promise.all(
-			[...familyQuery, ...genusResult, ...speciesResult].map(async (taxon) => {
-				const speciesName =
-					taxon.taxonType === "species"
-						? await this.getScientificallySplitName(taxon.taxonId)
-						: null;
-				const name =
-					taxon.taxonType === "species" && speciesName
-						? {
-							fullName: speciesName.name,
-							scientificPortions: speciesName.scientificPortions,
-						}
-						: taxon.taxonType === "genus"
-							? { fullName: taxon.name, scientificPortions: [taxon.name] }
-							: { fullName: taxon.name, scientificPortions: [] };
-				return { ...taxon, name };
-			}),
-		);
+		return [...familyQuery, ...genusResult, ...speciesResult].map((taxon) => {
+			if (taxon.taxonType !== 'species') {
+				return {
+					...taxon,
+					name: taxon.name,
+					scientificPortions: taxon.taxonType === 'genus' ? [taxon.name] : []
+				}
+			}
+			return taxon
+
+
+
+		});
 	}
 
 	public async search({
@@ -314,7 +302,7 @@ class TaxonomyService {
 
 		const selectCols = {
 			id: species.id,
-			name: species.name,
+			// name: species.name,
 
 			genusId: genera.id,
 			familyId: families.id,
@@ -331,6 +319,8 @@ class TaxonomyService {
 					ELSE
 						null
 					END`.as("plant_types_available"),
+			name: speciesScientificNames.name,
+			scientificPortions: speciesScientificNames.scientificPortions
 		};
 
 		const resultsQ = dbManager.db
@@ -339,6 +329,7 @@ class TaxonomyService {
 			.where(finalWhere)
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
+			.innerJoin(speciesScientificNames, eq(species.id, speciesScientificNames.speciesId))
 			.leftJoin(
 				plants,
 				and(
@@ -356,25 +347,9 @@ class TaxonomyService {
 			.limit(30)
 			.groupBy(species.id, genera.id, families.id)
 			.offset(page ? page * 30 : 0);
-		// const analyze = await dbManager.db.execute(sql`EXPLAIN ANALYZE ${resultsQ.getSQL()}`)
-		// console.log('RESULTS_Q', analyze)
+
 		const results = await resultsQ.execute()
-		const mappedResults: HydratedSpeciesSearchResult[] = [];
-
-		for (const item of results) {
-			const nameData = await this.getScientificallySplitName(item.id);
-			const result = {
-				...item,
-				name: {
-					fullName: nameData.name,
-					scientificPortions: nameData.scientificPortions,
-				},
-			} as HydratedSpeciesSearchResult;
-
-			mappedResults.push(result);
-		}
-
-		return mappedResults;
+		return results;
 	}
 
 	public async setNewInterest(
@@ -608,173 +583,6 @@ class TaxonomyService {
 		}
 	}
 
-	// public async getPossibleTradesForUser(speciesId: number, user: TUser): Promise<PossibleTrades> {
-	public async getPossibleTradesForUser(
-		speciesId: number,
-		user: TUser,
-	): Promise<PerfectMatchTrade[]> {
-		const [plant, ..._] = await dbManager.db
-			.select()
-			.from(plants)
-			.where(
-				and(
-					eq(plants.speciesId, speciesId),
-					eq(plants.userId, user.id),
-					isNull(plants.deletedAt),
-				),
-			);
-
-		if (!plant) {
-			throw new AppError("plant does not exist for user", 404);
-		}
-
-		const requestingUserInterests = await userService.getInterests(user.id);
-
-		const perfectMatchQuery = dbManager.db
-			.select({
-				id: plants.id,
-				speciesId: species.id,
-				userId: users.id,
-				name: species.name,
-				genusId: species.genusId,
-				familyId: species.familyId,
-				gbifKey: species.gbifKey,
-				gbifFamilyKey: species.gbifFamilyKey,
-				gbifGenusKey: species.gbifGenusKey,
-				vernacularNames: species.vernacularNames,
-				rank: species.rank,
-				createdAt: species.createdAt,
-				parentSpeciesId: species.parentSpeciesId,
-				userSubmitted: species.userSubmitted,
-				genusName: genera.name,
-				familyName: families.name,
-				type: plants.type,
-			})
-			.from(plants)
-			.innerJoin(species, eq(species.id, plants.speciesId))
-			.innerJoin(genera, eq(species.genusId, genera.id))
-			.innerJoin(families, eq(species.familyId, families.id))
-			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
-			.innerJoin(users, eq(users.id, plants.userId))
-			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
-			.where(
-				and(
-					isNull(plants.deletedAt),
-					inArray(
-						plants.speciesId,
-						requestingUserInterests.species.map(
-							(interest) => interest.speciesId,
-						),
-					),
-					eq(speciesInterests.speciesId, speciesId),
-				),
-			)
-			.prepare("perfectMatchQuery1");
-
-		const perfectMatches = await perfectMatchQuery.execute();
-		const perfectMatchTrades: PerfectMatchTrade[] = [];
-		for (const matchPlant of perfectMatches) {
-			const obj: PerfectMatchTrade = {
-				requestingUser: user,
-				requestingUsersPlant: await plantService.getCollectedPlant(
-					plant,
-					user.id,
-				),
-				receivingUser: await userService.getById(matchPlant.userId),
-				receivingUsersPlant: await plantService.getCollectedPlant(
-					matchPlant,
-					user.id,
-				),
-			};
-			perfectMatchTrades.push(obj);
-		}
-
-		return perfectMatchTrades;
-	}
-
-	public async getPossibleTradesForUserToGetSpecies(
-		speciesId: number,
-		user: TUser,
-	): Promise<PerfectMatchTrade[]> {
-		const userPlants = await plantService.getUserCollection(user.id);
-		const perfectMatchQuery = dbManager.db
-			.select({
-				id: plants.id,
-				speciesId: species.id,
-				userId: users.id,
-				name: species.name,
-				genusId: species.genusId,
-				familyId: species.familyId,
-				gbifKey: species.gbifKey,
-				gbifFamilyKey: species.gbifFamilyKey,
-				gbifGenusKey: species.gbifGenusKey,
-				vernacularNames: species.vernacularNames,
-				rank: species.rank,
-				createdAt: species.createdAt,
-				parentSpeciesId: species.parentSpeciesId,
-				userSubmitted: species.userSubmitted,
-				matchingInterestSpeciesId: speciesInterests.speciesId,
-				genusName: genera.name,
-				familyName: families.name,
-				type: plants.type,
-			})
-			.from(plants)
-			.innerJoin(species, eq(species.id, plants.speciesId))
-			.innerJoin(genera, eq(species.genusId, genera.id))
-			.innerJoin(families, eq(species.familyId, families.id))
-			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
-			.innerJoin(users, eq(users.id, plants.userId))
-			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
-			.where(
-				and(
-					isNull(plants.deletedAt),
-					eq(plants.speciesId, speciesId),
-					inArray(
-						speciesInterests.speciesId,
-						userPlants.map((plant) => plant.speciesId),
-					),
-				),
-			)
-			.prepare("perfectMatchQuery2");
-
-		const perfectMatches = await perfectMatchQuery.execute();
-
-		const perfectMatchTrades: PerfectMatchTrade[] = [];
-		for (const matchPlant of perfectMatches) {
-			const requestingUserPlantId = matchPlant.matchingInterestSpeciesId;
-			const [plant, ..._] = await dbManager.db
-				.select()
-				.from(plants)
-				.where(
-					and(
-						isNull(plants.deletedAt),
-						eq(plants.speciesId, requestingUserPlantId),
-						eq(plants.userId, user.id),
-					),
-				);
-			if (!plant) {
-				console.error("could not locate matching plant for trading user");
-				continue;
-			}
-			const obj: PerfectMatchTrade = {
-				requestingUser: user,
-				requestingUsersPlant: await plantService.getCollectedPlant(
-					plant,
-					user.id,
-				),
-				receivingUser: await userService.getById(matchPlant.userId),
-				receivingUsersPlant: await plantService.getCollectedPlant(
-					matchPlant,
-					user.id,
-				),
-			};
-			perfectMatchTrades.push(obj);
-		}
-
-		return perfectMatchTrades;
-	}
-
-
 	public async getFullSpeciesName(species: TSpecies): Promise<string>
 	public async getFullSpeciesName(speciesId: number): Promise<string>
 	public async getFullSpeciesName(arg: TSpecies | number): Promise<string> {
@@ -851,7 +659,7 @@ class TaxonomyService {
 	public async createSpeciesSubmission(
 		args: Zod.infer<typeof postSpeciesSubmissionSchema>,
 		user: TUser,
-	): Promise<{ newSpecies: TSpecies; submission: TUserSpeciesSubmission }> {
+	): Promise<{ newSpecies: TSpecies; submission: TUserSpeciesSubmission, scientificName: TSpeciesScientificName }> {
 		const { valid, reason } = await this.validateSpeciesSubmission(args);
 		if (!valid) {
 			throw new AppError(reason, 400);
@@ -863,7 +671,8 @@ class TaxonomyService {
 			userId: user.id,
 			speciesId: newSpecies.id,
 		});
-		return { newSpecies, submission };
+		const scientificName = await this.updateScientificNameForSpecies(newSpecies.id)
+		return { newSpecies, submission, scientificName };
 	}
 
 	private async validateSpeciesSubmission({
@@ -1246,10 +1055,12 @@ class TaxonomyService {
 		}
 
 		const spec: TSpecies = taxon as TSpecies;
+		const sciName = await dbManager.db.query.speciesScientificNames.findFirst({ where: eq(speciesScientificNames.speciesId, spec.id) })
+		if (!sciName) {
+			throw new AppError('Cant find scientific name for species')
+		}
+		const { scientificPortions } = sciName
 		if (spec.rank === "CROSS") {
-			const { scientificPortions } = await this.getScientificallySplitName(
-				spec.id,
-			);
 			classification.push({
 				type: "species",
 				name: spec.name,
@@ -1261,15 +1072,12 @@ class TaxonomyService {
 		}
 
 		if (spec.rank === "SPECIES") {
-			const { scientificPortions } = await this.getScientificallySplitName(
-				spec.id,
-			);
 			classification.push({
 				type: "species",
 				name: spec.name,
 				id: spec.id,
 				rank: spec.rank,
-				scientificPortions: scientificPortions,
+				scientificPortions,
 			});
 			return classification;
 		}
@@ -1290,6 +1098,7 @@ class TaxonomyService {
 		if (!spec.parentSpeciesId) {
 			return list;
 		}
+		// @todo get scientific name here as well
 		const parent = await this.speciesModel.getById(spec.parentSpeciesId);
 		if (!parent) {
 			throw new AppError(`cannot find parent for species ${spec.id}`);
@@ -1381,6 +1190,36 @@ class TaxonomyService {
 
 		return lowerTaxa;
 	}
+
+	public async updateScientificNameForSpecies(speciesInstance: TSpecies | number): Promise<TSpeciesScientificName> {
+		let speciesId: number;
+		let speciesObject: TSpecies;
+		if (typeof speciesInstance === 'number') {
+			speciesId = speciesInstance
+			speciesObject = await this.speciesModel.getById(speciesId, true)
+		} else {
+			speciesId = speciesInstance.id
+			speciesObject = speciesInstance
+		}
+
+		const { name, scientificPortions } = await this.getScientificallySplitName(speciesId)
+		const sciName = await dbManager.db.query.speciesScientificNames.findFirst({ where: eq(speciesScientificNames.speciesId, speciesId) })
+
+
+		if (!sciName) {
+			const [newName, ..._] = await dbManager.db.insert(speciesScientificNames).values({ speciesId, name, scientificPortions }).returning()
+			if (!newName) {
+				throw new AppError('Could not create scientific name for species')
+			}
+			return newName
+		}
+
+		const [updatedName, ..._] = await dbManager.db.update(speciesScientificNames).set({ name, scientificPortions }).where(eq(speciesScientificNames.id, sciName.id)).returning()
+		if (!updatedName) {
+			throw new AppError('Could not update scientific name for species')
+		}
+		return updatedName
+	}
 }
 
 interface AbbreviatedTaxon {
@@ -1422,10 +1261,9 @@ export default taxonomyService;
 
 export type HydratedSpeciesSearchResult = {
 	id: number;
-	name: {
-		fullName: string;
-		scientificPortions: string[];
-	};
+	name: string
+	scientificPortions: string[];
+
 	genusId: number;
 	familyId: number;
 	genusName: string;
@@ -1482,7 +1320,8 @@ function getCrossParentName(species?: TSpecies): string {
 export interface TaxonomySearchResult {
 	taxonId: number;
 	taxonType: "species" | "genus" | "family";
-	name: { fullName: string; scientificPortions: string[] };
+	name: string
+	scientificPortions: string[];
 	genusId?: number;
 	familyId?: number;
 	familyName?: string;

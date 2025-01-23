@@ -916,7 +916,6 @@ class TradingService {
 			(plant) => plant.speciesId === speciesId,
 		);
 
-		const userInterests = await userService.getInterests(user.id);
 		const spec = await dbManager.db.query.species.findFirst({
 			where: eq(species.id, speciesId),
 		});
@@ -952,7 +951,7 @@ class TradingService {
 				),
 			)
 			.innerJoin(tradeablePlants, eq(plants.id, tradeablePlants.plantId));
-		const usersThatWantIt = await dbManager.db
+		const usersThatWantItQuery = dbManager.db
 			.selectDistinctOn([users.id], {
 				id: users.id,
 				username: users.username,
@@ -992,6 +991,7 @@ class TradingService {
 			.leftJoin(genusInterests, eq(genusInterests.userId, users.id))
 			.leftJoin(familyInterests, eq(familyInterests.userId, users.id))
 			.groupBy(users.id);
+		const usersThatWantIt = await usersThatWantItQuery.execute()
 
 		const recommendedTradeUsersResult = userOwnsSpecies
 			? usersThatWantIt

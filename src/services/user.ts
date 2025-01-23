@@ -5,10 +5,9 @@ import {
 	familyInterests,
 	genera,
 	genusInterests,
-	plants,
 	speciesInterests,
+	speciesScientificNames,
 	tradeMessages,
-	tradeablePlants,
 } from "../db/schema";
 import { TFamily } from "../models/family";
 import type { TFamilyInterest } from "../models/family-interest";
@@ -81,23 +80,9 @@ class UserService {
 		userId: number,
 		requestingUserId: number,
 	): Promise<CollectedPlant[]> {
-		const p = await dbManager.db
-			.select({
-				id: plants.id,
-				userId: plants.userId,
-				createdAt: plants.createdAt,
-				speciesId: plants.speciesId,
-				type: plants.type,
-			})
-			.from(plants)
-			.where(and(eq(plants.userId, userId), isNull(plants.deletedAt)))
-			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id));
-		const rValue = await Promise.all(
-			p.map((innerP) =>
-				plantService.getCollectedPlant(innerP, requestingUserId),
-			),
-		);
-		return rValue;
+		const collection = await plantService.getUserCollection(userId)
+
+		return collection.filter(p => p.openForTrade);
 	}
 
 	public async getInterests(userId: number): Promise<{
@@ -111,9 +96,12 @@ class UserService {
 			.where(eq(speciesInterests.userId, userId));
 		const mappedInterests: SpeciesInterest[] = [];
 		for (const interest of userSpeciesInterests) {
-			const { name, scientificPortions } =
-				await taxonomyService.getScientificallySplitName(interest.speciesId);
+			const [sciName, ..._] = await dbManager.db.select().from(speciesScientificNames).where(eq(speciesScientificNames.speciesId, interest.speciesId))
+			if (!sciName) {
+				throw new AppError('Missing scientific name for species interest')
+			}
 
+			const { name, scientificPortions } = sciName
 			mappedInterests.push({ ...interest, fullName: name, scientificPortions });
 		}
 		const userGenusInterests = await dbManager.db

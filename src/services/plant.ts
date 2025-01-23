@@ -1,14 +1,13 @@
 
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import dbManager from "../db";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import dbManager from "../db/index";
 import {
 	families,
 	genera,
 	plants,
 	species,
-	speciesInterests,
+	speciesScientificNames,
 	tradeablePlants,
-	users,
 } from "../db/schema";
 import type { TFamily } from "../models/family";
 import type { TGenus } from "../models/genus";
@@ -45,31 +44,51 @@ class PlantService {
 		this.speciesModel = new SpeciesModel();
 	}
 
-	public async getUserCollection(user: TUser): Promise<CollectedPlant[]>;
-	public async getUserCollection(userId: number): Promise<CollectedPlant[]>;
-	public async getUserCollection(
-		user: number | TUser,
-	): Promise<CollectedPlant[]> {
-		let userId: number;
-		if (typeof user === "number") {
-			userId = user;
-		} else {
-			userId = user.id;
-		}
+	public async getUserCollection(user: TUser | number): Promise<CollectedPlant[]> {
+		const userId = typeof user === 'number' ? user : user.id;
 
-		const plants = await this.model.getByUserId(userId);
-		const collection: CollectedPlant[] = [];
-		const chunkSize = 10;
-		for (let i = 0; i < plants.length; i += chunkSize) {
-			const chunkPlants = plants.slice(i, i + chunkSize)
-			await Promise.all(chunkPlants.map(async (cp) => {
-				const collectedPlant = await this.getCollectedPlant(cp, userId);
-				collection.push(collectedPlant);
-			}))
-		}
+		const result = await dbManager.db
+			.select({
+				id: plants.id,
+				name: species.name,
+				genusId: species.genusId,
+				familyId: species.familyId,
+				gbifKey: species.gbifKey,
+				gbifFamilyKey: species.gbifFamilyKey,
+				gbifGenusKey: species.gbifGenusKey,
+				vernacularNames: species.vernacularNames,
+				rank: species.rank,
+				createdAt: species.createdAt,
+				parentSpeciesId: species.parentSpeciesId,
+				speciesName: species.speciesName,
+				speciesId: species.id,
+				cultivarName: species.cultivarName,
+				crossMomId: species.crossMomId,
+				crossDadId: species.crossDadId,
+				userSubmitted: species.userSubmitted,
+				genusName: genera.name,
+				familyName: families.name,
+				openForTrade: sql<boolean>`(${tradeablePlants.id}) IS NOT NULL`,
+				fullName: speciesScientificNames.name,
+				scientificPortions: speciesScientificNames.scientificPortions,
+				type: plants.type,
+			})
+			.from(plants)
+			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
+			.innerJoin(species, eq(species.id, plants.speciesId))
+			.innerJoin(speciesScientificNames, eq(species.id, speciesScientificNames.speciesId))
+			.innerJoin(genera, eq(species.genusId, genera.id))
+			.innerJoin(families, eq(species.familyId, families.id))
+			.where(and(eq(plants.userId, userId), isNull(plants.deletedAt)));
 
-		collection.sort((a, b) => a.fullName.localeCompare(b.fullName))
-		return collection;
+		return result.map(plant => ({
+			...plant,
+			id: plant.id,
+			speciesId: plant.speciesId,
+			createdAt: plant.createdAt,
+			type: plant.type,
+			collectedByUser: true,
+		}));
 	}
 
 	public async makePlantTradeable(plantId: number, user: TUser): Promise<void> {
@@ -136,7 +155,6 @@ class PlantService {
 		plant: Omit<TPlant, "deletedAt">,
 		requestingUserId: number,
 	): Promise<CollectedPlant> {
-
 		const q = dbManager.db
 			.select({
 				name: species.name,
@@ -157,25 +175,24 @@ class PlantService {
 				genusName: genera.name,
 				familyName: families.name,
 				openForTrade: sql<boolean>`(${tradeablePlants.id}) IS NOT NULL`,
+				fullName: speciesScientificNames.name,
+				scientificPortions: speciesScientificNames.scientificPortions,
 			})
 			.from(species)
 			.leftJoin(tradeablePlants, eq(tradeablePlants.plantId, plant.id))
+			.innerJoin(speciesScientificNames, eq(species.id, speciesScientificNames.speciesId))
 			.innerJoin(genera, eq(species.genusId, genera.id))
 			.innerJoin(families, eq(species.familyId, families.id))
 			.where(eq(species.id, plant.speciesId));
 
 		const [collectedPlant, ..._] = await q.execute()
 
-		if (!collectedPlant || !collectedPlant.genusName) {
+		if (!collectedPlant) {
 			throw new AppError("species not found", 404);
 		}
-		const { name, scientificPortions } =
-			await taxonomyService.getScientificallySplitName(plant.speciesId);
 
 		return {
 			...collectedPlant,
-			fullName: name,
-			scientificPortions,
 			id: plant.id,
 			speciesId: plant.speciesId,
 			createdAt: plant.createdAt,
@@ -183,113 +200,6 @@ class PlantService {
 			collectedByUser: plant.userId === requestingUserId,
 			userId: plant.userId,
 		};
-	}
-
-	// public async getPossibleTradesForUser(plantId: number, user: TUser): Promise<PossibleTrades> {
-	public async getPossibleTradesForUser(
-		speciesId: number,
-		user: TUser,
-	): Promise<PerfectMatchTrade[]> {
-		const [plant, ..._] = await dbManager.db
-			.select()
-			.from(plants)
-			.where(
-				and(
-					eq(plants.speciesId, speciesId),
-					eq(plants.userId, user.id),
-					isNull(plants.deletedAt),
-				),
-			);
-
-		if (!plant) {
-			throw new AppError("plant does not exist for user", 404);
-		}
-		const requestingUserInterests = await userService.getInterests(user.id);
-
-		const perfectMatchQuery = dbManager.db
-			.select({
-				id: plants.id,
-				speciesId: species.id,
-				userId: users.id,
-				name: species.name,
-				genusId: species.genusId,
-				familyId: species.familyId,
-				gbifKey: species.gbifKey,
-				gbifFamilyKey: species.gbifFamilyKey,
-				gbifGenusKey: species.gbifGenusKey,
-				vernacularNames: species.vernacularNames,
-				rank: species.rank,
-				createdAt: species.createdAt,
-				parentSpeciesId: species.parentSpeciesId,
-				userSubmitted: species.userSubmitted,
-				genusName: genera.name,
-				familyName: families.name,
-				type: plants.type,
-			})
-			.from(plants)
-			.innerJoin(species, eq(species.id, plants.speciesId))
-			.innerJoin(genera, eq(species.genusId, genera.id))
-			.innerJoin(families, eq(species.familyId, families.id))
-			.innerJoin(tradeablePlants, eq(tradeablePlants.plantId, plants.id))
-			.innerJoin(users, eq(users.id, plants.userId))
-			.innerJoin(speciesInterests, eq(speciesInterests.userId, users.id))
-			.where(
-				and(
-					isNull(plants.deletedAt),
-					inArray(
-						plants.speciesId,
-						requestingUserInterests.species.map(
-							(interest) => interest.speciesId,
-						),
-					),
-					eq(speciesInterests.speciesId, plant.speciesId),
-				),
-			)
-			.prepare("perfectMatchQuery");
-
-		const perfectMatches = await perfectMatchQuery.execute();
-		const perfectMatchTrades: PerfectMatchTrade[] = [];
-		for (const matchPlant of perfectMatches) {
-			const obj: PerfectMatchTrade = {
-				requestingUser: user,
-				requestingUsersPlant: await this.getCollectedPlant(matchPlant, user.id),
-				receivingUser: await userService.getById(matchPlant.userId),
-				receivingUsersPlant: await this.getCollectedPlant(matchPlant, user.id),
-			};
-			perfectMatchTrades.push(obj);
-		}
-
-		return perfectMatchTrades;
-	}
-
-	/**
-	 * @param user The id of the user whose ratings to get
-	 * @returns
-	 */
-	public async getByUser(userId: number): Promise<CollectedPlant[]>;
-	/**
-	 * @param user The user whose ratings to get
-	 * @returns
-	 */
-	public async getByUser(user: TUser): Promise<CollectedPlant[]>;
-	public async getByUser(user: TUser | number): Promise<CollectedPlant[]> {
-		let userId: number;
-		if (typeof user === "number") {
-			userId = user;
-		} else {
-			userId = user.id;
-		}
-		const plants = await this.model.getByUserId(userId);
-		const chunkSize = 5;
-		const returnArr: CollectedPlant[] = [];
-		for (let i = 0; i < plants.length; i += chunkSize) {
-			const end = i + chunkSize > plants.length ? plants.length : i + chunkSize;
-			const plantChunk = await Promise.all(
-				plants.slice(i, end).map(this.getCollectedPlant),
-			);
-			returnArr.push(...plantChunk);
-		}
-		return returnArr;
 	}
 
 	public async getById(

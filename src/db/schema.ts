@@ -125,6 +125,19 @@ export const species = pgTable(
 	}),
 );
 
+export const speciesScientificNames = pgTable(
+	'species_scientific_names',
+	{
+		id: serial("id").primaryKey(),
+		speciesId: integer('species_id').references(() => species.id).notNull(),
+		name: text('name').notNull(),
+		scientificPortions: text('scientific_portions').array().notNull(),
+		updatedAt: timestamp('updated_at').defaultNow().notNull(),
+	}, (speciesScientificNames) => ({
+		speciesIdIdx: index('species_scientific_name_species_id_index').on(speciesScientificNames.speciesId)
+	})
+)
+
 export const speciesRelations = relations(species, ({ one, many }) => ({
 	parentSpecies: one(species, {
 		fields: [species.parentSpeciesId],
@@ -425,6 +438,7 @@ export const Schema = {
 	genera,
 	families,
 	speciesInterests,
+	speciesScientificNames,
 	genusInterests,
 	familyInterests,
 	tradeablePlants,

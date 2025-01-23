@@ -230,35 +230,6 @@ taxonomyRouter.post(
 		}
 	},
 );
-/**
- * /:plantId/trades/possible
- * Gets possible trades for a specific plant (not species!) and user
- */
-taxonomyRouter.get(
-	"/species/:speciesId/trades/possible",
-	async (req, res, next) => {
-		try {
-			const user = requireUser(req);
-			const { receive } = req.query;
-
-			if (receive) {
-				const possibleTrades =
-					await taxonomyService.getPossibleTradesForUserToGetSpecies(
-						Number(req.params.speciesId),
-						user,
-					);
-				return res.status(200).send(possibleTrades);
-			}
-			const possibleTrades = await taxonomyService.getPossibleTradesForUser(
-				Number(req.params.speciesId),
-				user,
-			);
-			return res.status(200).send(possibleTrades);
-		} catch (e) {
-			return next(e);
-		}
-	},
-);
 
 taxonomyRouter.post("/species/:speciesId/interests", async (req, res, next) => {
 	try {

@@ -1,5 +1,6 @@
 import fixSpeciesRanks from "./commands/fix-species-ranks";
 import initSpeciesNames from "./commands/init-speciesnames";
+import setScientificNames from "./commands/set-scientific-names";
 import {
 	scrapeAllBase,
 	scrapeFamilyDataAll,
@@ -41,6 +42,9 @@ function run(scriptName: string, otherArgs?: string[]) {
 			fixSpeciesRanks(start);
 			break;
 		}
+		case 'set-scientific-names':
+			setScientificNames()
+			break
 		default:
 			throw new Error(`script name not recognized:${scriptName}`);
 	}

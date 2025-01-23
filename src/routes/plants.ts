@@ -20,16 +20,6 @@ plantsRouter.use("/", requireJwt, async (req, _res, next) => {
 	next();
 });
 
-plantsRouter.get("/", async (req, res, next) => {
-	try {
-		const user = requireUser(req);
-		const plants = await plantService.getByUser(user);
-		return res.send(plants);
-	} catch (e) {
-		return next(e);
-	}
-});
-
 plantsRouter.post(
 	"/",
 	validateRequest({ body: postPlantSchema }),
