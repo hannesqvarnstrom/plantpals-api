@@ -29,6 +29,52 @@ export const users = pgTable(
 	}),
 );
 
+const preferredTradeMethodsEnum = pgEnum('preferred_trade_methods', ['post', 'in_person'])
+export const userProfiles = pgTable(
+	"user_profiles",
+	{
+		id: serial('id').primaryKey(),
+		bio: varchar('bio', { length: 2000 }),
+		country: varchar('country', { length: 256 }),
+		city: varchar('city', { length: 256 }),
+		tradesByPost: boolean('trades_by_post').default(true),
+		tradesInPerson: boolean('trades_in_person').default(false),
+		preferredTradeMethod: preferredTradeMethodsEnum('preferred_trade_method'),
+		userId: integer('user_id').references(() => users.id).notNull()
+	}, (table) => ({
+		userIdIdx: index('user_id_index').on(table.userId),
+		// more??
+	})
+)
+
+export const userProfileRelations = relations(userProfiles, (helpers) => ({
+	user: helpers.one(users, {
+		fields: [userProfiles.userId],
+		references: [users.id]
+	})
+}))
+
+export const favouriteUsers = pgTable('favourite_users', {
+	id: serial("id").primaryKey(),
+	userId: integer('user_id').references(() => users.id).notNull(),
+	favouriteUserId: integer('favourite_user_id').references(() => users.id).notNull(),
+	createdAt: timestamp('created_at').defaultNow()
+}, (table) => ({
+	favouriteUsersUserIdIndex: index('favourite_users_user_id_index').on(table.userId),
+	favouriteUsersFavouriteUserIdIndex: index('favourite_users_favourite_user_id_index').on(table.favouriteUserId)
+}))
+
+export const favouriteUserRelations = relations(favouriteUsers, (helpers) => ({
+	user: helpers.one(users, {
+		fields: [favouriteUsers.userId],
+		references: [users.id]
+	}),
+	favouriteUser: helpers.one(users, {
+		fields: [favouriteUsers.favouriteUserId],
+		references: [users.id]
+	})
+}))
+
 export const userRelations = relations(users, (helpers) => ({
 	tradesRequestedByUser: helpers.many(trades, {
 		relationName: "tradesRequestedByUser",
@@ -36,7 +82,12 @@ export const userRelations = relations(users, (helpers) => ({
 	tradesReceivedByUser: helpers.many(trades, {
 		relationName: "tradesReceivedByUser",
 	}),
+	profile: helpers.one(userProfiles),
+	favourites: helpers.many(favouriteUsers, {
+		relationName: 'favourites'
+	})
 }));
+
 export const federatedIdentities = pgTable("federated_identities", {
 	provider: providerEnum("provider").notNull(),
 	providerId: varchar("providerId"), // user's ID in remote
@@ -432,6 +483,11 @@ export const tradeSuggestionPlantRelations = relations(
 export const Schema = {
 	users,
 	userRelations,
+	userProfiles,
+	favouriteUsers,
+	favouriteUserRelations,
+	preferredTradeMethodsEnum,
+	userProfileRelations,
 	federatedIdentities,
 	plants,
 	species,

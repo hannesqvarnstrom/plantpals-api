@@ -1,13 +1,16 @@
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, ilike, isNull, not, or } from "drizzle-orm";
+import type { z } from "zod";
 import dbManager from "../db";
 import {
 	families,
 	familyInterests,
+	favouriteUsers,
 	genera,
 	genusInterests,
 	speciesInterests,
 	speciesScientificNames,
 	tradeMessages,
+	users,
 } from "../db/schema";
 import { TFamily } from "../models/family";
 import type { TFamilyInterest } from "../models/family-interest";
@@ -18,7 +21,8 @@ import UserModel, {
 	type TUser,
 	type TUserCreateArgs,
 } from "../models/user";
-import type { SchemaInterface, updateMeSchema } from "../routes/schemas";
+import UserProfileModel, { type TUserProfile } from "../models/user-profile";
+import type { SchemaInterface, updateMeSchema, updateProfileSchema } from "../routes/schemas";
 import { AppError } from "../utils/errors";
 import { AuthenticationService } from "./authentication";
 import plantService, { type CollectedPlant } from "./plant";
@@ -26,9 +30,10 @@ import taxonomyService from "./taxonomy";
 
 class UserService {
 	model: UserModel;
-
+	profileModel: UserProfileModel
 	constructor() {
 		this.model = new UserModel();
+		this.profileModel = new UserProfileModel()
 	}
 
 	public async getById(id: number): Promise<TUser> {
@@ -158,6 +163,45 @@ class UserService {
 			},
 		});
 		return messages;
+	}
+
+	public async getProfileByUserId(userId: number): Promise<TUserProfile | undefined> {
+		return this.profileModel.getByUserId(userId)
+	}
+	public async updateProfile(args: z.infer<typeof updateProfileSchema>, user: TUser): Promise<TUserProfile> {
+		const profile = await this.profileModel.getByUserId(user.id)
+		if (!profile) {
+			return this.profileModel.create({ ...args, userId: user.id })
+		}
+
+		return this.profileModel.update(profile, args)
+	}
+
+	public async addFavourite(user: TUser, userId: number): Promise<{ id: number, username: string }> {
+		const favouriteExists = await dbManager.db.query.favouriteUsers.findFirst({ where: and(eq(favouriteUsers.userId, user.id), eq(favouriteUsers.favouriteUserId, userId)) })
+		console.log('favouriteExists:', favouriteExists)
+		if (!favouriteExists) {
+			await dbManager.db.insert(favouriteUsers).values({ userId: user.id, favouriteUserId: userId })
+		}
+		const favUser = await this.model.getById(userId, true)
+		return { id: favUser.id, username: favUser.username ?? '' }
+	}
+
+	public async removeFavourite(user: TUser, userId: number): Promise<void> {
+		await dbManager.db.delete(favouriteUsers).where(and(eq(favouriteUsers.userId, user.id), eq(favouriteUsers.favouriteUserId, userId)))
+	}
+
+	public async getFavourites(user: TUser): Promise<{ id: number, username: string }[]> {
+		const favourites = await dbManager.db.query.favouriteUsers.findMany({ where: eq(favouriteUsers.userId, user.id), with: { favouriteUser: true } })
+
+
+		return favourites.map(f => ({ id: f.favouriteUserId, username: f.favouriteUser.username ?? '' }))
+	}
+
+	public async search({ query }: { query: string }, user: TUser): Promise<{ id: number, username: string }[]> {
+		const q = `%${query}%`
+		const results = await dbManager.db.query.users.findMany({ where: and(ilike(users.username, q), not(eq(users.id, user.id))) })
+		return results.map(user => ({ id: user.id, username: user.username ?? '' }))
 	}
 }
 

@@ -6,9 +6,9 @@ import { z } from "zod";
 
 export type SchemaInterface<
 	Schema extends // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		| Zod.ZodEffects<Zod.ZodObject<any, any, any, any, any>>
-		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		| Zod.ZodObject<any, any, any, any, any>,
+	| Zod.ZodEffects<Zod.ZodObject<any, any, any, any, any>>
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+	| Zod.ZodObject<any, any, any, any, any>,
 > = z.infer<Schema>;
 
 /**
@@ -102,6 +102,17 @@ export const updateMeSchema = z
 			ctx.addIssue(issue);
 		}
 	});
+
+export const updateProfileSchema = z.object({
+	username: z.string().min(4).optional(),
+	bio: z.string().max(2000).optional(),
+	preferredTradeMethods: z.array(z.enum(['post', 'in_person'])).optional(),
+	tradesByPost: z.boolean(),
+	tradesInPerson: z.boolean(),
+	preferredTradeMethod: z.enum(['post', 'in_person']).optional(),
+	country: z.string().min(3).optional(),
+	city: z.string().min(3).optional(),
+})
 
 // getPlantSchema,
 // const x: InferInsertModel<typeof plants> = {}
