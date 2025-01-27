@@ -132,7 +132,8 @@ class TaxonomyService {
 				plants,
 				plantsJoin
 			)
-			.limit(3);
+			.limit(3)
+			.offset(page ? page * 3 : 0);
 
 		const genusQuery = dbManager.db
 			.selectDistinctOn([genera.id], {
@@ -154,7 +155,9 @@ class TaxonomyService {
 				plants,
 				plantsJoin
 			)
-			.limit(3);
+			.limit(3)
+			.offset(page ? page * 3 : 0);
+
 
 		const genusResult = await genusQuery.execute();
 
@@ -183,7 +186,7 @@ class TaxonomyService {
 			)
 			.groupBy(species.id, genera.id, families.id, speciesScientificNames.name, speciesScientificNames.scientificPortions)
 			.limit(10)
-			.offset(page ? page * 30 : 0);
+			.offset(page ? page * 10 : 0);
 
 		const speciesResult = await speciesQuery.execute()
 
